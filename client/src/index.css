@@ -1175,5 +1175,171 @@ textarea.form-input {
   font-family: var(--font-mono);
 }
 
+/* ============================================================== */
+/* LIBRARIAN PORTAL: SEAT BOOKING MATCHED THEME                   */
+/* ============================================================== */
+.librarian-shell {
+  display: flex;
+  min-height: 100vh;
+  background-color: var(--bg-app);
+}
+
+.librarian-sidebar {
+  width: 260px;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-light);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  z-index: 40;
+}
+
+.librarian-sidebar-header {
+  padding: 1.15rem 1.25rem;
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.librarian-sidebar-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.librarian-nav-group-title {
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.75rem 0.5rem 0.35rem;
+}
+
+.librarian-nav-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.librarian-nav-btn:hover {
+  background: var(--bg-surface-secondary);
+  color: var(--text-primary);
+}
+
+.librarian-nav-btn.active {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #ffffff;
+  box-shadow: 2px 2px 0px #0f172a;
+}
+
+.librarian-nav-btn.active svg {
+  color: #ffffff !important;
+}
+
+.librarian-content-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background-color: var(--bg-app);
+}
+
+.librarian-top-bar {
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-light);
+  padding: 0.85rem 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+.sketch-action-btn {
+  background: var(--bg-surface);
+  border: 1.5px solid #0f172a;
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.95rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #0f172a;
+  box-shadow: 2px 2px 0px #0f172a;
+  cursor: pointer;
+  transition: all 0.1s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.sketch-action-btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0px #0f172a;
+}
+
+.sketch-action-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0px #0f172a;
+}
+
+.sketch-action-btn.primary {
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.sketch-action-btn.primary:hover {
+  background: #1e293b;
+}
+
+.sketch-action-btn.danger {
+  background: #ef4444;
+  border-color: #b91c1c;
+  color: #ffffff;
+  box-shadow: 2px 2px 0px #b91c1c;
+}
+
+.chair-box.maintenance {
+  background: repeating-linear-gradient(45deg, #fef3c7, #fef3c7 4px, #fde68a 4px, #fde68a 8px);
+  border: 1.5px dashed #d97706;
+  color: #92400e;
+  font-weight: 800;
+}
+
+.chair-box.reserved-boys {
+  background: var(--male-blue-bg);
+  border-color: var(--male-blue);
+  color: var(--male-blue);
+  font-weight: 800;
+}
+
+.chair-box.reserved-girls {
+  background: var(--female-pink-bg);
+  border-color: var(--female-pink);
+  color: var(--female-pink);
+  font-weight: 800;
+}
+
+
 
 
