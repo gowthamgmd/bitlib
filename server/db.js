@@ -13,15 +13,29 @@ const {
   DigitalResource
 } = require('./models');
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/bitlib';
+let rawMongoUri = (process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/bitlib').trim();
+// Strip accidental surrounding quotes if copied from .env file
+if ((rawMongoUri.startsWith('"') && rawMongoUri.endsWith('"')) || (rawMongoUri.startsWith("'") && rawMongoUri.endsWith("'"))) {
+  rawMongoUri = rawMongoUri.slice(1, -1).trim();
+}
+const MONGODB_URI = rawMongoUri;
+
+function getMaskedUri(uri) {
+  try {
+    return uri.replace(/:([^@]+)@/, ':****@');
+  } catch {
+    return 'Invalid URI';
+  }
+}
 
 async function connectDB() {
   try {
     await mongoose.connect(MONGODB_URI);
-    console.log(`Connected to MongoDB successfully at ${MONGODB_URI}`);
+    console.log(`Connected to MongoDB successfully at ${getMaskedUri(MONGODB_URI)}`);
     await seedInitialData();
   } catch (err) {
-    console.error('MongoDB connection error:', err);
+    console.error('MongoDB connection error:', err.message || err);
+    console.error(`Attempted connection URI format: ${getMaskedUri(MONGODB_URI)}`);
     process.exit(1);
   }
 }
