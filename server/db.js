@@ -123,7 +123,7 @@ async function seedInitialData() {
   if (!librarianExists) {
     await User.create({
       roll_number: 'LIB-001',
-      name: 'Dr. S. Ramanathan (Librarian)',
+      name: 'Librarian',
       email: 'librarian@bitsathy.ac.in',
       password_hash: '',
       gender: 'MALE',

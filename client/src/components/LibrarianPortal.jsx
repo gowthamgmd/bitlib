@@ -35,8 +35,13 @@ import {
   Calendar,
   Wrench,
   Ban,
-  Bookmark
+  Bookmark,
+  GraduationCap,
+  Download,
+  Upload,
+  Sparkles
 } from 'lucide-react';
+
 
 export default function LibrarianPortal({ user, token, onSwitchToStudentView, onLogout, showMessage }) {
   // Navigation State (12 sections)
@@ -126,6 +131,40 @@ export default function LibrarianPortal({ user, token, onSwitchToStudentView, on
   // Reports State
   const [reportsData, setReportsData] = useState(null);
 
+  // Digital Resources Management State
+  const [digitalList, setDigitalList] = useState([]);
+  const [digitalStats, setDigitalStats] = useState({ total: 0, published: 0, draft: 0, archived: 0, views: 0, downloads: 0, bookmarks: 0 });
+  const [digitalSearch, setDigitalSearch] = useState('');
+  const [digitalCatFilter, setDigitalCatFilter] = useState('ALL');
+  const [digitalDeptFilter, setDigitalDeptFilter] = useState('ALL');
+  const [digitalTypeFilter, setDigitalTypeFilter] = useState('ALL');
+  const [digitalStatusFilter, setDigitalStatusFilter] = useState('ALL');
+  const [digitalSortBy, setDigitalSortBy] = useState('recent');
+  const [digitalPage, setDigitalPage] = useState(1);
+  const [digitalTotalPages, setDigitalTotalPages] = useState(1);
+  const [showResourceModal, setShowResourceModal] = useState(false);
+  const [editingResource, setEditingResource] = useState(null);
+  const [deleteResourceModal, setDeleteResourceModal] = useState(null);
+  const [resourceSourceMode, setResourceSourceMode] = useState('FILE'); // 'FILE' | 'URL'
+  const [resourceForm, setResourceForm] = useState({
+    title: '',
+    description: '',
+    author: '',
+    publisher: '',
+    category: 'E-books and Textbooks',
+    subject: 'Computer Science',
+    department: 'Computer Science and Engineering',
+    resource_type: 'PDF',
+    publication_year: new Date().getFullYear(),
+    external_url: '',
+    access_type: 'INSTITUTIONAL',
+    publication_status: 'PUBLISHED',
+    tags: ''
+  });
+  const [selectedUploadFile, setSelectedUploadFile] = useState(null);
+  const [resourceFormError, setResourceFormError] = useState('');
+
+
   // Initial Common Data Fetching
   useEffect(() => {
     fetch('/api/seats/sessions')
@@ -165,8 +204,14 @@ export default function LibrarianPortal({ user, token, onSwitchToStudentView, on
       loadAuditLogs();
     } else if (activeSection === 'REPORTS') {
       loadReports();
+    } else if (activeSection === 'DIGITAL_RESOURCES') {
+      loadDigitalResources();
     }
-  }, [activeSection, selectedDate, selectedSession, token, mapFloor]);
+  }, [
+    activeSection, selectedDate, selectedSession, token, mapFloor,
+    digitalSearch, digitalCatFilter, digitalDeptFilter, digitalTypeFilter, digitalStatusFilter, digitalSortBy, digitalPage
+  ]);
+
 
   const authHeaders = {
     'Content-Type': 'application/json',
@@ -640,6 +685,211 @@ export default function LibrarianPortal({ user, token, onSwitchToStudentView, on
     });
   };
 
+  // ==========================================
+  // DIGITAL RESOURCE MANAGEMENT HANDLERS
+  // ==========================================
+  const loadDigitalResources = () => {
+    setLoading(true);
+    const params = new URLSearchParams({
+      page: digitalPage,
+      limit: 15,
+      sort_by: digitalSortBy
+    });
+    if (digitalSearch.trim()) params.append('search', digitalSearch.trim());
+    if (digitalCatFilter !== 'ALL') params.append('category', digitalCatFilter);
+    if (digitalDeptFilter !== 'ALL') params.append('department', digitalDeptFilter);
+    if (digitalTypeFilter !== 'ALL') params.append('resource_type', digitalTypeFilter);
+    if (digitalStatusFilter !== 'ALL') params.append('publication_status', digitalStatusFilter);
+
+    fetch(`/api/librarian/digital-resources?${params.toString()}`, { headers: authHeaders })
+      .then(res => res.json())
+      .then(data => {
+        if (data.resources) {
+          setDigitalList(data.resources);
+          setDigitalTotalPages(data.total_pages || 1);
+          if (data.stats) setDigitalStats(data.stats);
+        }
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('Failed to load digital resources:', err);
+        setLoading(false);
+      });
+  };
+
+  const handleOpenAddResource = () => {
+    setEditingResource(null);
+    setResourceSourceMode('FILE');
+    setSelectedUploadFile(null);
+    setResourceFormError('');
+    setResourceForm({
+      title: '',
+      description: '',
+      author: '',
+      publisher: 'Bannari Amman Institute of Technology',
+      category: 'E-books and Textbooks',
+      subject: 'Computer Science',
+      department: 'Computer Science and Engineering',
+      resource_type: 'PDF',
+      publication_year: new Date().getFullYear(),
+      external_url: '',
+      access_type: 'INSTITUTIONAL',
+      publication_status: 'PUBLISHED',
+      tags: ''
+    });
+    setShowResourceModal(true);
+  };
+
+  const handleOpenEditResource = (resource) => {
+    setEditingResource(resource);
+    setResourceSourceMode(resource.external_url ? 'URL' : 'FILE');
+    setSelectedUploadFile(null);
+    setResourceFormError('');
+    setResourceForm({
+      title: resource.title || '',
+      description: resource.description || '',
+      author: resource.author || '',
+      publisher: resource.publisher || '',
+      category: resource.category || 'E-books and Textbooks',
+      subject: resource.subject || 'General',
+      department: resource.department || 'All Departments',
+      resource_type: resource.resource_type || 'PDF',
+      publication_year: resource.publication_year || new Date().getFullYear(),
+      external_url: resource.external_url || '',
+      access_type: resource.access_type || 'INSTITUTIONAL',
+      publication_status: resource.publication_status || 'PUBLISHED',
+      tags: Array.isArray(resource.tags) ? resource.tags.join(', ') : (resource.tags || '')
+    });
+    setShowResourceModal(true);
+  };
+
+  const handleSaveResource = async (e) => {
+    e.preventDefault();
+    setResourceFormError('');
+
+    if (!resourceForm.title.trim()) {
+      setResourceFormError('Resource Title is required.');
+      return;
+    }
+
+    if (resourceSourceMode === 'URL') {
+      const url = resourceForm.external_url.trim();
+      if (!url) {
+        setResourceFormError('External academic URL is required.');
+        return;
+      }
+      if (!url.startsWith('https://') && !url.startsWith('http://')) {
+        setResourceFormError('External URL must begin with https:// or http://');
+        return;
+      }
+    } else {
+      if (!editingResource && !selectedUploadFile) {
+        setResourceFormError('Please select a file to upload (.pdf, .epub, .doc, .zip).');
+        return;
+      }
+    }
+
+    setActionLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('title', resourceForm.title.trim());
+      formData.append('description', resourceForm.description.trim());
+      formData.append('author', resourceForm.author.trim());
+      formData.append('publisher', resourceForm.publisher.trim());
+      formData.append('category', resourceForm.category);
+      formData.append('subject', resourceForm.subject.trim());
+      formData.append('department', resourceForm.department);
+      formData.append('resource_type', resourceForm.resource_type);
+      formData.append('publication_year', resourceForm.publication_year);
+      formData.append('access_type', resourceForm.access_type);
+      formData.append('publication_status', resourceForm.publication_status);
+      formData.append('tags', resourceForm.tags);
+
+      if (resourceSourceMode === 'URL') {
+        formData.append('external_url', resourceForm.external_url.trim());
+      } else {
+        formData.append('external_url', '');
+        if (selectedUploadFile) {
+          formData.append('file', selectedUploadFile);
+        }
+      }
+
+      const url = editingResource
+        ? `/api/librarian/digital-resources/${editingResource._id}`
+        : '/api/librarian/digital-resources';
+      const method = editingResource ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setResourceFormError(data.error || 'Failed to save digital resource.');
+        setActionLoading(false);
+        return;
+      }
+
+      showMessage('success', data.message || 'Resource catalogue entry saved successfully.');
+      setShowResourceModal(false);
+      setEditingResource(null);
+      setSelectedUploadFile(null);
+      loadDigitalResources();
+      loadOverview();
+    } catch (err) {
+      console.error('Save digital resource error:', err);
+      setResourceFormError('Network error while saving resource.');
+    }
+    setActionLoading(false);
+  };
+
+  const handleToggleStatus = async (resource, newStatus) => {
+    try {
+      const res = await fetch(`/api/librarian/digital-resources/${resource._id}/status`, {
+        method: 'PATCH',
+        headers: authHeaders,
+        body: JSON.stringify({ publication_status: newStatus })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showMessage('error', data.error || 'Failed to update status.');
+        return;
+      }
+      showMessage('success', data.message);
+      loadDigitalResources();
+      loadOverview();
+    } catch {
+      showMessage('error', 'Network error while updating status.');
+    }
+  };
+
+  const handleDeleteResource = async () => {
+    if (!deleteResourceModal) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/librarian/digital-resources/${deleteResourceModal._id}`, {
+        method: 'DELETE',
+        headers: authHeaders
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showMessage('error', data.error || 'Failed to delete resource.');
+        setActionLoading(false);
+        return;
+      }
+      showMessage('success', data.message);
+      setDeleteResourceModal(null);
+      loadDigitalResources();
+      loadOverview();
+    } catch {
+      showMessage('error', 'Network error while deleting resource.');
+    }
+    setActionLoading(false);
+  };
+
+
   const renderChair = (seat) => {
     if (!seat) return <div style={{ width: 28, height: 28 }} />;
     const isSelected = selectedSeatDetails?._id === seat._id;
@@ -733,6 +983,12 @@ export default function LibrarianPortal({ user, token, onSwitchToStudentView, on
         { id: 'CATALOGUE', label: 'Book Catalogue', icon: BookOpen },
         { id: 'CIRCULATION', label: 'Circulation Desk (Issue/Return)', icon: ArrowRightLeft },
         { id: 'OVERDUE', label: 'Overdue Books & Fines', icon: AlertTriangle, badge: overviewData?.metrics?.books?.overdue_loans }
+      ]
+    },
+    {
+      group: 'DIGITAL RESOURCES & E-LEARNING',
+      items: [
+        { id: 'DIGITAL_RESOURCES', label: 'Digital Resource Management', icon: GraduationCap, badge: overviewData?.metrics?.digital_resources?.published }
       ]
     },
     {
@@ -878,6 +1134,7 @@ export default function LibrarianPortal({ user, token, onSwitchToStudentView, on
               {activeSection === 'STUDENTS' && 'Student Records Directory'}
               {activeSection === 'AUDIT_LOGS' && 'Administrative Audit Log & History'}
               {activeSection === 'REPORTS' && 'Operational Analytics & Reports'}
+              {activeSection === 'DIGITAL_RESOURCES' && 'Digital Resource Management'}
             </h1>
             <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0 }}>
               BITSathy Central Library Management System • Live Administrative Console
@@ -2583,8 +2840,364 @@ export default function LibrarianPortal({ user, token, onSwitchToStudentView, on
               )}
             </div>
           )}
+
+          {/* ─────────────────────────────────────────────────────────────
+              13. DIGITAL RESOURCE MANAGEMENT (CURATION & CRUD)
+          ───────────────────────────────────────────────────────────── */}
+          {activeSection === 'DIGITAL_RESOURCES' && (
+            <div>
+              {/* Operations KPI Metrics Row */}
+              <div className="librarian-stats-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)', marginBottom: '1.25rem' }}>
+                <div className="light-card librarian-stat-card">
+                  <div className="stat-content">
+                    <span className="stat-label">Total Catalogue</span>
+                    <span className="stat-value">{digitalStats.total}</span>
+                    <span className="stat-subtitle">Curated Academic Materials</span>
+                  </div>
+                  <div className="stat-icon-wrapper" style={{ background: '#eff6ff', color: '#2563eb' }}>
+                    <GraduationCap size={20} />
+                  </div>
+                </div>
+
+                <div className="light-card librarian-stat-card">
+                  <div className="stat-content">
+                    <span className="stat-label">Published Live</span>
+                    <span className="stat-value" style={{ color: '#16a34a' }}>{digitalStats.published}</span>
+                    <span className="stat-subtitle">Accessible by Students</span>
+                  </div>
+                  <div className="stat-icon-wrapper" style={{ background: '#f0fdf4', color: '#16a34a' }}>
+                    <CheckCircle2 size={20} />
+                  </div>
+                </div>
+
+                <div className="light-card librarian-stat-card">
+                  <div className="stat-content">
+                    <span className="stat-label">Drafts Pending</span>
+                    <span className="stat-value" style={{ color: '#d97706' }}>{digitalStats.draft}</span>
+                    <span className="stat-subtitle">Under Review</span>
+                  </div>
+                  <div className="stat-icon-wrapper" style={{ background: '#fef3c7', color: '#d97706' }}>
+                    <Clock size={20} />
+                  </div>
+                </div>
+
+                <div className="light-card librarian-stat-card">
+                  <div className="stat-content">
+                    <span className="stat-label">Total Student Views</span>
+                    <span className="stat-value">{digitalStats.views}</span>
+                    <span className="stat-subtitle">Academic Impressions</span>
+                  </div>
+                  <div className="stat-icon-wrapper" style={{ background: '#f5f3ff', color: '#7c3aed' }}>
+                    <Eye size={20} />
+                  </div>
+                </div>
+
+                <div className="light-card librarian-stat-card">
+                  <div className="stat-content">
+                    <span className="stat-label">File Downloads</span>
+                    <span className="stat-value">{digitalStats.downloads}</span>
+                    <span className="stat-subtitle">Offline Study Copies</span>
+                  </div>
+                  <div className="stat-icon-wrapper" style={{ background: '#ecfdf5', color: '#059669' }}>
+                    <Download size={20} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Bar & Search / Filter Toolbar */}
+              <div className="light-card" style={{ padding: '1rem 1.25rem', marginBottom: '1.25rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: '300px' }}>
+                    <div style={{ position: 'relative', width: '100%', maxWidth: '360px' }}>
+                      <Search size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                      <input
+                        type="text"
+                        className="form-input"
+                        style={{ paddingLeft: '2.1rem' }}
+                        placeholder="Search resources by title, author, subject..."
+                        value={digitalSearch}
+                        onChange={(e) => { setDigitalSearch(e.target.value); setDigitalPage(1); }}
+                      />
+                    </div>
+
+                    <select
+                      className="form-input"
+                      style={{ width: 'auto' }}
+                      value={digitalCatFilter}
+                      onChange={(e) => { setDigitalCatFilter(e.target.value); setDigitalPage(1); }}
+                    >
+                      <option value="ALL">All 8 Categories</option>
+                      <option value="E-books and Textbooks">E-books and Textbooks</option>
+                      <option value="Research Papers and Journals">Research Papers and Journals</option>
+                      <option value="Previous-Year Question Papers">Previous-Year Question Papers</option>
+                      <option value="Lecture Notes and Study Materials">Lecture Notes and Study Materials</option>
+                      <option value="Laboratory Manuals">Laboratory Manuals</option>
+                      <option value="Programming and Technical Tutorials">Programming and Technical Tutorials</option>
+                      <option value="Online Courses and Educational Videos">Online Courses and Educational Videos</option>
+                      <option value="Other Academic Resources">Other Academic Resources</option>
+                    </select>
+
+                    <select
+                      className="form-input"
+                      style={{ width: 'auto' }}
+                      value={digitalStatusFilter}
+                      onChange={(e) => { setDigitalStatusFilter(e.target.value); setDigitalPage(1); }}
+                    >
+                      <option value="ALL">All Statuses</option>
+                      <option value="PUBLISHED">Published</option>
+                      <option value="DRAFT">Draft</option>
+                      <option value="ARCHIVED">Archived</option>
+                    </select>
+
+                    <select
+                      className="form-input"
+                      style={{ width: 'auto' }}
+                      value={digitalTypeFilter}
+                      onChange={(e) => { setDigitalTypeFilter(e.target.value); setDigitalPage(1); }}
+                    >
+                      <option value="ALL">All Types</option>
+                      <option value="PDF">PDF</option>
+                      <option value="EBOOK">E-Book</option>
+                      <option value="JOURNAL">Journal</option>
+                      <option value="VIDEO">Video</option>
+                      <option value="EXTERNAL_LINK">External Link</option>
+                      <option value="LAB_MANUAL">Lab Manual</option>
+                      <option value="TUTORIAL">Tutorial</option>
+                    </select>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '0.65rem' }}>
+                    <button
+                      onClick={loadDigitalResources}
+                      className="sketch-action-btn"
+                      title="Refresh Digital Catalogue"
+                    >
+                      <RefreshCw size={14} />
+                      <span>Refresh</span>
+                    </button>
+                    <button
+                      onClick={handleOpenAddResource}
+                      className="sketch-action-btn primary"
+                    >
+                      <Plus size={14} />
+                      <span>Add New Digital Resource</span>
+                    </button>
+                  </div>
+                </div>
+
+                {(digitalSearch || digitalCatFilter !== 'ALL' || digitalStatusFilter !== 'ALL' || digitalTypeFilter !== 'ALL') && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    <span>Active Filters:</span>
+                    {digitalSearch && <span className="chip">Query: "{digitalSearch}"</span>}
+                    {digitalCatFilter !== 'ALL' && <span className="chip">Category: {digitalCatFilter}</span>}
+                    {digitalStatusFilter !== 'ALL' && <span className="chip">Status: {digitalStatusFilter}</span>}
+                    {digitalTypeFilter !== 'ALL' && <span className="chip">Type: {digitalTypeFilter}</span>}
+                    <button
+                      onClick={() => {
+                        setDigitalSearch('');
+                        setDigitalCatFilter('ALL');
+                        setDigitalStatusFilter('ALL');
+                        setDigitalTypeFilter('ALL');
+                        setDigitalPage(1);
+                      }}
+                      style={{ background: 'transparent', border: 'none', color: '#2563eb', fontWeight: 700, cursor: 'pointer', marginLeft: '0.5rem' }}
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Digital Resources Table */}
+              <div className="light-card" style={{ padding: 0, overflow: 'hidden' }}>
+                {loading ? (
+                  <div style={{ padding: '3.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    Loading Digital Resources Catalogue...
+                  </div>
+                ) : digitalList.length === 0 ? (
+                  <div style={{ padding: '3.5rem 2rem', textAlign: 'center' }}>
+                    <GraduationCap size={44} color="#94a3b8" style={{ margin: '0 auto 0.75rem' }} />
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.35rem' }}>
+                      No digital resources found
+                    </h3>
+                    <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
+                      Add an academic e-book, research paper, question bank, or external educational link.
+                    </p>
+                    <button onClick={handleOpenAddResource} className="sketch-action-btn primary">
+                      <Plus size={14} />
+                      <span>Add First Digital Resource</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="table-responsive">
+                    <table className="librarian-table">
+                      <thead>
+                        <tr>
+                          <th>Resource Title & Description</th>
+                          <th>Category & Dept</th>
+                          <th>Format & Source</th>
+                          <th>Access Level</th>
+                          <th>Status</th>
+                          <th>Engagement</th>
+                          <th style={{ textAlign: 'right' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {digitalList.map(res => (
+                          <tr key={res._id}>
+                            <td style={{ maxWidth: '300px' }}>
+                              <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.88rem', lineHeight: 1.3, marginBottom: '0.2rem' }}>
+                                {res.title}
+                              </div>
+                              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>
+                                By: {res.author || 'BITSathy Academic Staff'} {res.publisher ? `• ${res.publisher}` : ''}
+                              </div>
+                              <div style={{ fontSize: '0.72rem', color: '#64748b', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                {res.description}
+                              </div>
+                            </td>
+
+                            <td>
+                              <span style={{
+                                fontSize: '0.74rem',
+                                fontWeight: 700,
+                                display: 'block',
+                                color: '#0f172a',
+                                marginBottom: '0.2rem'
+                              }}>
+                                {res.category}
+                              </span>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                                {res.department}
+                              </span>
+                            </td>
+
+                            <td>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.25rem' }}>
+                                <span className="resource-type-pill" style={{ fontSize: '0.65rem' }}>
+                                  {res.resource_type}
+                                </span>
+                              </div>
+                              {res.file_reference ? (
+                                <span style={{ fontSize: '0.7rem', color: '#059669', display: 'flex', alignItems: 'center', gap: '0.25rem', fontFamily: 'var(--font-mono)' }}>
+                                  <Download size={11} /> File ({Math.round((res.file_reference.file_size || 0) / 1024)} KB)
+                                </span>
+                              ) : res.external_url ? (
+                                <a
+                                  href={res.external_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{ fontSize: '0.7rem', color: '#2563eb', display: 'flex', alignItems: 'center', gap: '0.25rem', textDecoration: 'none' }}
+                                >
+                                  <ExternalLink size={11} /> External Link
+                                </a>
+                              ) : (
+                                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>No file attached</span>
+                              )}
+                            </td>
+
+                            <td>
+                              <span className={`access-type-pill ${res.access_type.toLowerCase()}`}>
+                                {res.access_type === 'OPEN_ACCESS' ? 'Open Access' : res.access_type === 'INSTITUTIONAL' ? 'Institutional' : 'Restricted'}
+                              </span>
+                            </td>
+
+                            <td>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                <span style={{
+                                  fontSize: '0.68rem',
+                                  fontWeight: 800,
+                                  fontFamily: 'var(--font-mono)',
+                                  padding: '0.2rem 0.55rem',
+                                  borderRadius: '12px',
+                                  background: res.publication_status === 'PUBLISHED' ? '#ecfdf5' : res.publication_status === 'DRAFT' ? '#fef3c7' : '#f1f5f9',
+                                  color: res.publication_status === 'PUBLISHED' ? '#047857' : res.publication_status === 'DRAFT' ? '#b45309' : '#475569',
+                                  border: `1px solid ${res.publication_status === 'PUBLISHED' ? '#a7f3d0' : res.publication_status === 'DRAFT' ? '#fde68a' : '#cbd5e1'}`
+                                }}>
+                                  {res.publication_status}
+                                </span>
+
+                                <select
+                                  style={{ fontSize: '0.7rem', padding: '0.15rem 0.35rem', border: '1px solid var(--border-light)', borderRadius: '4px', background: '#fff' }}
+                                  value={res.publication_status}
+                                  onChange={(e) => handleToggleStatus(res, e.target.value)}
+                                  title="Change Publication Status"
+                                >
+                                  <option value="PUBLISHED">Publish</option>
+                                  <option value="DRAFT">Draft</option>
+                                  <option value="ARCHIVED">Archive</option>
+                                </select>
+                              </div>
+                            </td>
+
+                            <td>
+                              <div style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                                <div><Eye size={12} style={{ verticalAlign: 'middle', marginRight: 3 }} /> <strong>{res.views_count}</strong> views</div>
+                                <div><Download size={12} style={{ verticalAlign: 'middle', marginRight: 3 }} /> <strong>{res.downloads_count}</strong> downloads</div>
+                              </div>
+                            </td>
+
+                            <td style={{ textAlign: 'right' }}>
+                              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.35rem' }}>
+                                <button
+                                  onClick={() => handleOpenEditResource(res)}
+                                  className="sketch-action-btn"
+                                  style={{ padding: '0.3rem 0.6rem', fontSize: '0.72rem' }}
+                                  title="Edit Resource Metadata"
+                                >
+                                  <Edit size={12} />
+                                  <span>Edit</span>
+                                </button>
+
+                                <button
+                                  onClick={() => setDeleteResourceModal(res)}
+                                  className="sketch-action-btn danger"
+                                  style={{ padding: '0.3rem 0.6rem', fontSize: '0.72rem' }}
+                                  title="Delete Resource"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Pagination */}
+                {digitalTotalPages > 1 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem 1.25rem', borderTop: '1px solid var(--border-light)', background: '#f8fafc' }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      Page {digitalPage} of {digitalTotalPages}
+                    </span>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button
+                        className="sketch-action-btn"
+                        style={{ padding: '0.3rem 0.75rem', fontSize: '0.75rem' }}
+                        disabled={digitalPage <= 1}
+                        onClick={() => setDigitalPage(prev => Math.max(1, prev - 1))}
+                      >
+                        Previous
+                      </button>
+                      <button
+                        className="sketch-action-btn"
+                        style={{ padding: '0.3rem 0.75rem', fontSize: '0.75rem' }}
+                        disabled={digitalPage >= digitalTotalPages}
+                        onClick={() => setDigitalPage(prev => Math.min(digitalTotalPages, prev + 1))}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </main>
+
 
       {/* ─────────────────────────────────────────────────────────────
           MODALS SECTION (SIGNATURE CLEAN LIGHT SKETCH THEME)
@@ -2995,6 +3608,318 @@ export default function LibrarianPortal({ user, token, onSwitchToStudentView, on
           </div>
         </div>
       )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          11. Modal: Add / Edit Digital Resource
+      ───────────────────────────────────────────────────────────── */}
+      {showResourceModal && (
+        <div className="modal-overlay">
+          <div className="modal-card" style={{ maxWidth: '640px', padding: '1.75rem', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <div>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
+                  {editingResource ? 'Edit Digital Resource' : 'Add New Digital Academic Resource'}
+                </h3>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0 }}>
+                  Curate educational materials, papers, lecture notes, or external links for BITSathy students.
+                </p>
+              </div>
+              <button onClick={() => setShowResourceModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            {resourceFormError && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '0.65rem 0.85rem', color: '#991b1b', fontSize: '0.8rem', fontWeight: 600, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <AlertCircle size={16} />
+                <span>{resourceFormError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveResource}>
+              <div className="form-group">
+                <label className="form-label">Resource Title *</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. CS8492 Database Management Systems Question Paper Nov/Dec 2024"
+                  value={resourceForm.title}
+                  onChange={(e) => setResourceForm({ ...resourceForm, title: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Category * (8 Prescribed Categories)</label>
+                  <select
+                    className="form-input"
+                    value={resourceForm.category}
+                    onChange={(e) => setResourceForm({ ...resourceForm, category: e.target.value })}
+                  >
+                    <option value="E-books and Textbooks">1. E-books and Textbooks</option>
+                    <option value="Research Papers and Journals">2. Research Papers and Journals</option>
+                    <option value="Previous-Year Question Papers">3. Previous-Year Question Papers</option>
+                    <option value="Lecture Notes and Study Materials">4. Lecture Notes and Study Materials</option>
+                    <option value="Laboratory Manuals">5. Laboratory Manuals</option>
+                    <option value="Programming and Technical Tutorials">6. Programming and Technical Tutorials</option>
+                    <option value="Online Courses and Educational Videos">7. Online Courses and Educational Videos</option>
+                    <option value="Other Academic Resources">8. Other Academic Resources</option>
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Resource Format / Type *</label>
+                  <select
+                    className="form-input"
+                    value={resourceForm.resource_type}
+                    onChange={(e) => setResourceForm({ ...resourceForm, resource_type: e.target.value })}
+                  >
+                    <option value="PDF">PDF Document</option>
+                    <option value="EBOOK">E-book</option>
+                    <option value="JOURNAL">Journal Reprints</option>
+                    <option value="VIDEO">Video Course / Lecture</option>
+                    <option value="EXTERNAL_LINK">External Web Link</option>
+                    <option value="LAB_MANUAL">Lab Manual</option>
+                    <option value="TUTORIAL">Technical Tutorial</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Author / Faculty Creator</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. Dr. Senthilkumar / Silberschatz"
+                    value={resourceForm.author}
+                    onChange={(e) => setResourceForm({ ...resourceForm, author: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Publisher / Institution</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. BITSathy / Pearson / IEEE"
+                    value={resourceForm.publisher}
+                    onChange={(e) => setResourceForm({ ...resourceForm, publisher: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Department</label>
+                  <select
+                    className="form-input"
+                    value={resourceForm.department}
+                    onChange={(e) => setResourceForm({ ...resourceForm, department: e.target.value })}
+                  >
+                    <option value="All Departments">All Departments</option>
+                    <option value="Computer Science and Engineering">Computer Science and Engineering</option>
+                    <option value="Information Technology">Information Technology</option>
+                    <option value="Electronics and Communication Engineering">Electronics and Communication Engineering</option>
+                    <option value="Artificial Intelligence & Data Science">Artificial Intelligence & Data Science</option>
+                    <option value="Electrical and Electronics Engineering">Electrical and Electronics Engineering</option>
+                    <option value="Mechanical Engineering">Mechanical Engineering</option>
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Subject / Academic Domain</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. Database Systems / Embedded Systems"
+                    value={resourceForm.subject}
+                    onChange={(e) => setResourceForm({ ...resourceForm, subject: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {/* Source Toggle: Upload File vs External URL */}
+              <div style={{ background: '#f8fafc', border: '1.5px solid var(--border-light)', borderRadius: '8px', padding: '1rem', marginBottom: '0.85rem' }}>
+                <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.75rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer' }}>
+                    <input
+                      type="radio"
+                      name="sourceMode"
+                      checked={resourceSourceMode === 'FILE'}
+                      onChange={() => setResourceSourceMode('FILE')}
+                    />
+                    <span>Upload Document File (PDF, EPUB, DOC)</span>
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer' }}>
+                    <input
+                      type="radio"
+                      name="sourceMode"
+                      checked={resourceSourceMode === 'URL'}
+                      onChange={() => setResourceSourceMode('URL')}
+                    />
+                    <span>External Academic URL (HTTPS)</span>
+                  </label>
+                </div>
+
+                {resourceSourceMode === 'FILE' ? (
+                  <div>
+                    <input
+                      type="file"
+                      accept=".pdf,.epub,.doc,.docx,.ppt,.pptx,.zip,.txt"
+                      className="form-input"
+                      onChange={(e) => setSelectedUploadFile(e.target.files[0] || null)}
+                    />
+                    {editingResource?.file_reference && !selectedUploadFile && (
+                      <p style={{ fontSize: '0.72rem', color: '#059669', marginTop: '0.35rem' }}>
+                        Current file on server: <strong>{editingResource.file_reference.original_name}</strong>. Choose new file only to replace it.
+                      </p>
+                    )}
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                      Supported formats: PDF, EPUB, DOC, PPT, ZIP (Max: 50MB). Stored securely on server.
+                    </span>
+                  </div>
+                ) : (
+                  <div>
+                    <input
+                      type="url"
+                      className="form-input"
+                      placeholder="https://nptel.ac.in/courses/... or https://arxiv.org/abs/..."
+                      value={resourceForm.external_url}
+                      onChange={(e) => setResourceForm({ ...resourceForm, external_url: e.target.value })}
+                    />
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                      Enter legitimate academic URL. Safe HTTPS protocol required.
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Access Level</label>
+                  <select
+                    className="form-input"
+                    value={resourceForm.access_type}
+                    onChange={(e) => setResourceForm({ ...resourceForm, access_type: e.target.value })}
+                  >
+                    <option value="INSTITUTIONAL">Institutional (@bitsathy)</option>
+                    <option value="OPEN_ACCESS">Open Access (Public)</option>
+                    <option value="RESTRICTED">Restricted</option>
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Publication Status</label>
+                  <select
+                    className="form-input"
+                    value={resourceForm.publication_status}
+                    onChange={(e) => setResourceForm({ ...resourceForm, publication_status: e.target.value })}
+                  >
+                    <option value="PUBLISHED">Published (Live)</option>
+                    <option value="DRAFT">Draft (Hidden)</option>
+                    <option value="ARCHIVED">Archived</option>
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Year of Publication</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={resourceForm.publication_year}
+                    onChange={(e) => setResourceForm({ ...resourceForm, publication_year: parseInt(e.target.value) || 2024 })}
+                  />
+                </div>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                <label className="form-label">Description & Academic Notes</label>
+                <textarea
+                  className="form-input"
+                  rows={2}
+                  placeholder="Outline topics covered, key concepts, syllabus relevance..."
+                  value={resourceForm.description}
+                  onChange={(e) => setResourceForm({ ...resourceForm, description: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                <label className="form-label">Subject Tags & Keywords (comma-separated)</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. Database, SQL, RDBMS, Autonomous, Anna University"
+                  value={resourceForm.tags}
+                  onChange={(e) => setResourceForm({ ...resourceForm, tags: e.target.value })}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="sketch-action-btn"
+                  onClick={() => setShowResourceModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={actionLoading}
+                  className="sketch-action-btn primary"
+                >
+                  {actionLoading ? 'Saving...' : editingResource ? 'Update Catalogue Entry' : 'Save & Publish Resource'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          12. Modal: Delete Digital Resource Confirmation
+      ───────────────────────────────────────────────────────────── */}
+      {deleteResourceModal && (
+        <div className="modal-overlay">
+          <div className="modal-card" style={{ maxWidth: '440px', padding: '1.75rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>Delete Digital Resource</h3>
+              <button onClick={() => setDeleteResourceModal(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: '1.25rem' }}>
+              Are you sure you want to delete <strong style={{ color: '#0f172a' }}>"{deleteResourceModal.title}"</strong> ({deleteResourceModal.category})?
+            </p>
+
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '0.75rem 1rem', fontSize: '0.78rem', color: '#991b1b', marginBottom: '1.25rem' }}>
+              ⚠️ This will remove the resource from the student catalogue and delete any associated bookmarks. Action is logged in the administrative audit trail.
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                className="sketch-action-btn"
+                onClick={() => setDeleteResourceModal(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={actionLoading}
+                onClick={handleDeleteResource}
+                className="sketch-action-btn danger"
+              >
+                {actionLoading ? 'Deleting...' : 'Confirm Deletion'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

@@ -1,4 +1,7 @@
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const {
   User,
   Floor,
@@ -11,10 +14,44 @@ const {
   DiscussionRoom,
   RoomBooking,
   Notification,
-  AuditLog
+  AuditLog,
+  DigitalResource,
+  ResourceBookmark,
+  ResourceActivity
 } = require('../models');
 const { authenticateToken, requireLibrarian } = require('../middleware/auth');
 const { performDailySeatReset } = require('../services/seatReset');
+
+// Multer Storage Configuration for Digital Resource Uploads
+const uploadDir = path.join(__dirname, '../uploads/digital-resources');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `res_${Date.now()}_${Math.round(Math.random() * 1e6)}${ext}`);
+  }
+});
+
+const resourceUpload = multer({
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+  fileFilter: (req, file, cb) => {
+    const allowedExts = ['.pdf', '.epub', '.doc', '.docx', '.ppt', '.pptx', '.zip', '.txt'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedExts.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`File type not allowed. Supported formats: ${allowedExts.join(', ')}`));
+    }
+  }
+});
+
 
 const router = express.Router();
 const DAILY_FINE_RATE = 2.0; // ₹2/day
@@ -50,7 +87,9 @@ router.get('/overview', async (req, res) => {
       returnedLoans,
       totalRooms,
       roomBookings,
-      recentAuditLogs
+      recentAuditLogs,
+      totalDigitalResources,
+      publishedDigitalResources
     ] = await Promise.all([
       Seat.countDocuments(),
       Seat.countDocuments({ status: 'MAINTENANCE' }),
@@ -62,7 +101,9 @@ router.get('/overview', async (req, res) => {
       BookLoan.find({ status: 'RETURNED' }).lean(),
       DiscussionRoom.countDocuments(),
       RoomBooking.find().populate('room user', 'name roll_number email').lean(),
-      AuditLog.find().sort({ createdAt: -1 }).limit(10).lean()
+      AuditLog.find().sort({ createdAt: -1 }).limit(10).lean(),
+      DigitalResource.countDocuments(),
+      DigitalResource.countDocuments({ publication_status: 'PUBLISHED' })
     ]);
 
     const now = new Date();
@@ -109,6 +150,10 @@ router.get('/overview', async (req, res) => {
           pending_requests: pendingRooms,
           approved_bookings: approvedRooms,
           rejected_requests: rejectedRooms
+        },
+        digital_resources: {
+          total: totalDigitalResources,
+          published: publishedDigitalResources
         }
       },
       recent_activity: recentAuditLogs,
@@ -1172,4 +1217,446 @@ router.get('/reports', async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────
+// 8. DIGITAL RESOURCE MANAGEMENT (CRUD, AUDIT & FILE HANDLING)
+// ─────────────────────────────────────────────────────────────
+
+// GET /api/librarian/digital-resources - List all resources with filters & operational stats
+router.get('/digital-resources', async (req, res) => {
+  try {
+    const {
+      search,
+      category,
+      department,
+      resource_type,
+      publication_status,
+      access_type,
+      sort_by = 'recent',
+      page = 1,
+      limit = 20
+    } = req.query;
+
+    const filter = {};
+
+    if (category && category !== 'ALL') {
+      filter.category = category;
+    }
+    if (department && department !== 'ALL') {
+      filter.department = department;
+    }
+    if (resource_type && resource_type !== 'ALL') {
+      filter.resource_type = resource_type;
+    }
+    if (publication_status && publication_status !== 'ALL') {
+      filter.publication_status = publication_status;
+    }
+    if (access_type && access_type !== 'ALL') {
+      filter.access_type = access_type;
+    }
+
+    if (search && search.trim()) {
+      const q = search.trim();
+      filter.$or = [
+        { title: { $regex: q, $options: 'i' } },
+        { author: { $regex: q, $options: 'i' } },
+        { publisher: { $regex: q, $options: 'i' } },
+        { subject: { $regex: q, $options: 'i' } },
+        { tags: { $regex: q, $options: 'i' } }
+      ];
+    }
+
+    let sort = { createdAt: -1 };
+    if (sort_by === 'title_asc') sort = { title: 1 };
+    else if (sort_by === 'views') sort = { views_count: -1, createdAt: -1 };
+    else if (sort_by === 'downloads') sort = { downloads_count: -1, createdAt: -1 };
+    else if (sort_by === 'year_desc') sort = { publication_year: -1, createdAt: -1 };
+
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.max(1, Math.min(100, parseInt(limit) || 20));
+    const skip = (pageNum - 1) * limitNum;
+
+    const [
+      resources,
+      totalCount,
+      totalAll,
+      publishedCount,
+      draftCount,
+      archivedCount,
+      metricsAgg
+    ] = await Promise.all([
+      DigitalResource.find(filter)
+        .populate('created_by', 'name email roll_number')
+        .populate('updated_by', 'name email roll_number')
+        .sort(sort)
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      DigitalResource.countDocuments(filter),
+      DigitalResource.countDocuments(),
+      DigitalResource.countDocuments({ publication_status: 'PUBLISHED' }),
+      DigitalResource.countDocuments({ publication_status: 'DRAFT' }),
+      DigitalResource.countDocuments({ publication_status: 'ARCHIVED' }),
+      DigitalResource.aggregate([
+        {
+          $group: {
+            _id: null,
+            total_views: { $sum: '$views_count' },
+            total_downloads: { $sum: '$downloads_count' },
+            total_bookmarks: { $sum: '$bookmarks_count' }
+          }
+        }
+      ])
+    ]);
+
+    const stats = {
+      total: totalAll,
+      published: publishedCount,
+      draft: draftCount,
+      archived: archivedCount,
+      views: metricsAgg[0]?.total_views || 0,
+      downloads: metricsAgg[0]?.total_downloads || 0,
+      bookmarks: metricsAgg[0]?.total_bookmarks || 0
+    };
+
+    res.json({
+      resources,
+      total: totalCount,
+      page: pageNum,
+      limit: limitNum,
+      total_pages: Math.ceil(totalCount / limitNum),
+      stats
+    });
+  } catch (err) {
+    console.error('Librarian list digital resources error:', err);
+    res.status(500).json({ error: 'Failed to retrieve digital resources.' });
+  }
+});
+
+// GET /api/librarian/digital-resources/:id - Get single resource details
+router.get('/digital-resources/:id', async (req, res) => {
+  try {
+    const resource = await DigitalResource.findById(req.params.id)
+      .populate('created_by', 'name email roll_number')
+      .populate('updated_by', 'name email roll_number')
+      .lean();
+
+    if (!resource) {
+      return res.status(404).json({ error: 'Digital resource not found.' });
+    }
+
+    const [recentActivities, bookmarkCount] = await Promise.all([
+      ResourceActivity.find({ resource: resource._id })
+        .populate('user', 'name roll_number email department')
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean(),
+      ResourceBookmark.countDocuments({ resource: resource._id })
+    ]);
+
+    res.json({
+      resource,
+      recent_activities: recentActivities,
+      live_bookmarks_count: bookmarkCount
+    });
+  } catch (err) {
+    console.error('Librarian get digital resource error:', err);
+    res.status(500).json({ error: 'Failed to fetch digital resource details.' });
+  }
+});
+
+// POST /api/librarian/digital-resources - Create a new digital resource
+router.post('/digital-resources', resourceUpload.single('file'), async (req, res) => {
+  try {
+    const {
+      title,
+      description,
+      author,
+      publisher,
+      category,
+      subject,
+      department,
+      resource_type = 'PDF',
+      publication_year,
+      external_url,
+      access_type = 'INSTITUTIONAL',
+      publication_status = 'PUBLISHED',
+      tags,
+      cover_image
+    } = req.body;
+
+    if (!title || !title.trim()) {
+      return res.status(400).json({ error: 'Resource title is required.' });
+    }
+    if (!category || !category.trim()) {
+      return res.status(400).json({ error: 'Valid resource category is required.' });
+    }
+
+    let file_reference = undefined;
+    if (req.file) {
+      file_reference = {
+        filename: req.file.filename,
+        original_name: req.file.originalname,
+        mime_type: req.file.mimetype,
+        file_size: req.file.size,
+        storage_path: path.relative(path.join(__dirname, '..'), req.file.path).replace(/\\/g, '/')
+      };
+    }
+
+    // Validate external URL if provided
+    let safeUrl = (external_url || '').trim();
+    if (safeUrl) {
+      if (!safeUrl.startsWith('https://') && !safeUrl.startsWith('http://')) {
+        return res.status(400).json({ error: 'External URL must begin with https:// or http://' });
+      }
+    }
+
+    if (!file_reference && !safeUrl) {
+      return res.status(400).json({ error: 'Either an uploaded file or an external academic URL must be provided.' });
+    }
+
+    // Parse tags if string
+    let parsedTags = [];
+    if (Array.isArray(tags)) {
+      parsedTags = tags;
+    } else if (typeof tags === 'string') {
+      parsedTags = tags.split(',').map(t => t.trim()).filter(Boolean);
+    }
+
+    const newResource = await DigitalResource.create({
+      title: title.trim(),
+      description: (description || '').trim(),
+      author: (author || '').trim(),
+      publisher: (publisher || '').trim(),
+      category: category.trim(),
+      subject: (subject || 'General').trim(),
+      department: (department || 'All Departments').trim(),
+      resource_type,
+      publication_year: parseInt(publication_year) || new Date().getFullYear(),
+      cover_image: (cover_image || '').trim(),
+      file_reference,
+      external_url: safeUrl,
+      access_type,
+      publication_status,
+      tags: parsedTags,
+      created_by: req.user._id,
+      updated_by: req.user._id
+    });
+
+    // Audit log
+    await AuditLog.create({
+      actor: req.user._id,
+      actor_name: req.user.name,
+      actor_role: req.user.role,
+      action: 'CREATE_RESOURCE',
+      category: 'DIGITAL_RESOURCE',
+      target_id: newResource._id.toString(),
+      target_description: `Added digital resource "${newResource.title}" under ${newResource.category}`,
+      details: {
+        category: newResource.category,
+        resource_type: newResource.resource_type,
+        access_type: newResource.access_type,
+        has_file: !!file_reference,
+        external_url: safeUrl
+      }
+    });
+
+    res.status(201).json({
+      message: 'Digital resource catalogue entry created successfully.',
+      resource: newResource
+    });
+  } catch (err) {
+    console.error('Librarian create digital resource error:', err);
+    res.status(500).json({ error: err.message || 'Failed to create digital resource.' });
+  }
+});
+
+// PUT /api/librarian/digital-resources/:id - Update resource metadata and optional file
+router.put('/digital-resources/:id', resourceUpload.single('file'), async (req, res) => {
+  try {
+    const resource = await DigitalResource.findById(req.params.id);
+    if (!resource) {
+      return res.status(404).json({ error: 'Digital resource not found.' });
+    }
+
+    const {
+      title,
+      description,
+      author,
+      publisher,
+      category,
+      subject,
+      department,
+      resource_type,
+      publication_year,
+      external_url,
+      access_type,
+      publication_status,
+      tags,
+      cover_image
+    } = req.body;
+
+    if (title) resource.title = title.trim();
+    if (description !== undefined) resource.description = description.trim();
+    if (author !== undefined) resource.author = author.trim();
+    if (publisher !== undefined) resource.publisher = publisher.trim();
+    if (category) resource.category = category.trim();
+    if (subject !== undefined) resource.subject = subject.trim();
+    if (department !== undefined) resource.department = department.trim();
+    if (resource_type) resource.resource_type = resource_type;
+    if (publication_year) resource.publication_year = parseInt(publication_year) || resource.publication_year;
+    if (access_type) resource.access_type = access_type;
+    if (publication_status) resource.publication_status = publication_status;
+    if (cover_image !== undefined) resource.cover_image = cover_image.trim();
+
+    if (external_url !== undefined) {
+      const safeUrl = external_url.trim();
+      if (safeUrl && !safeUrl.startsWith('https://') && !safeUrl.startsWith('http://')) {
+        return res.status(400).json({ error: 'External URL must begin with https:// or http://' });
+      }
+      resource.external_url = safeUrl;
+    }
+
+    if (tags !== undefined) {
+      if (Array.isArray(tags)) resource.tags = tags;
+      else if (typeof tags === 'string') {
+        resource.tags = tags.split(',').map(t => t.trim()).filter(Boolean);
+      }
+    }
+
+    // Replace file if uploaded
+    if (req.file) {
+      // Remove old file from disk if it was stored
+      if (resource.file_reference && resource.file_reference.storage_path) {
+        const oldPath = path.resolve(__dirname, '..', resource.file_reference.storage_path);
+        if (fs.existsSync(oldPath)) {
+          try { fs.unlinkSync(oldPath); } catch (e) {}
+        }
+      }
+
+      resource.file_reference = {
+        filename: req.file.filename,
+        original_name: req.file.originalname,
+        mime_type: req.file.mimetype,
+        file_size: req.file.size,
+        storage_path: path.relative(path.join(__dirname, '..'), req.file.path).replace(/\\/g, '/')
+      };
+    }
+
+    resource.updated_by = req.user._id;
+    await resource.save();
+
+    // Audit log
+    await AuditLog.create({
+      actor: req.user._id,
+      actor_name: req.user.name,
+      actor_role: req.user.role,
+      action: 'UPDATE_RESOURCE',
+      category: 'DIGITAL_RESOURCE',
+      target_id: resource._id.toString(),
+      target_description: `Updated metadata for resource "${resource.title}"`,
+      details: {
+        status: resource.publication_status,
+        access_type: resource.access_type,
+        updated_file: !!req.file
+      }
+    });
+
+    res.json({
+      message: 'Digital resource updated successfully.',
+      resource
+    });
+  } catch (err) {
+    console.error('Librarian update digital resource error:', err);
+    res.status(500).json({ error: err.message || 'Failed to update digital resource.' });
+  }
+});
+
+// PATCH /api/librarian/digital-resources/:id/status - Quick publish/unpublish/archive toggle
+router.patch('/digital-resources/:id/status', async (req, res) => {
+  try {
+    const { publication_status } = req.body;
+    if (!['PUBLISHED', 'DRAFT', 'ARCHIVED'].includes(publication_status)) {
+      return res.status(400).json({ error: 'Valid status required: PUBLISHED, DRAFT, or ARCHIVED.' });
+    }
+
+    const resource = await DigitalResource.findByIdAndUpdate(
+      req.params.id,
+      { publication_status, updated_by: req.user._id },
+      { new: true }
+    );
+
+    if (!resource) {
+      return res.status(404).json({ error: 'Digital resource not found.' });
+    }
+
+    await AuditLog.create({
+      actor: req.user._id,
+      actor_name: req.user.name,
+      actor_role: req.user.role,
+      action: 'CHANGE_STATUS',
+      category: 'DIGITAL_RESOURCE',
+      target_id: resource._id.toString(),
+      target_description: `Changed publication status of "${resource.title}" to ${publication_status}`,
+      details: { new_status: publication_status }
+    });
+
+    res.json({
+      message: `Resource status changed to ${publication_status}.`,
+      resource
+    });
+  } catch (err) {
+    console.error('Librarian update status error:', err);
+    res.status(500).json({ error: 'Failed to update resource status.' });
+  }
+});
+
+// DELETE /api/librarian/digital-resources/:id - Delete resource & clean up file
+router.delete('/digital-resources/:id', async (req, res) => {
+  try {
+    const resource = await DigitalResource.findById(req.params.id);
+    if (!resource) {
+      return res.status(404).json({ error: 'Digital resource not found.' });
+    }
+
+    // Unlink physical file if exists
+    if (resource.file_reference && resource.file_reference.storage_path) {
+      const filePath = path.resolve(__dirname, '..', resource.file_reference.storage_path);
+      if (fs.existsSync(filePath)) {
+        try { fs.unlinkSync(filePath); } catch (e) {}
+      }
+    }
+
+    // Clean up associated bookmarks
+    await Promise.all([
+      ResourceBookmark.deleteMany({ resource: resource._id }),
+      DigitalResource.findByIdAndDelete(resource._id)
+    ]);
+
+    // Audit log
+    await AuditLog.create({
+      actor: req.user._id,
+      actor_name: req.user.name,
+      actor_role: req.user.role,
+      action: 'DELETE_RESOURCE',
+      category: 'DIGITAL_RESOURCE',
+      target_id: resource._id.toString(),
+      target_description: `Deleted digital resource "${resource.title}" (${resource.category})`,
+      details: {
+        title: resource.title,
+        category: resource.category,
+        views: resource.views_count,
+        downloads: resource.downloads_count
+      }
+    });
+
+    res.json({
+      message: `Resource "${resource.title}" has been deleted from the catalogue.`
+    });
+  } catch (err) {
+    console.error('Librarian delete digital resource error:', err);
+    res.status(500).json({ error: 'Failed to delete digital resource.' });
+  }
+});
+
 module.exports = router;
+

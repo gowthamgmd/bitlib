@@ -10,7 +10,10 @@ const {
   Session,
   Book,
   BookCopy,
-  DiscussionRoom
+  DiscussionRoom,
+  DigitalResource,
+  ResourceBookmark,
+  ResourceActivity
 } = require('../models');
 const { authenticateToken } = require('../middleware/auth');
 
@@ -104,14 +107,40 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
 
     const unreadNotifsCount = notifications.filter(n => !n.is_read).length;
 
-    // 6. Summary Stats
+    // 6. Fetch Student's Digital Resources (Bookmarks & Recent Access)
+    const [bookmarks, digitalActivities, recentMaterials] = await Promise.all([
+      ResourceBookmark.find({ user: userId })
+        .populate('resource')
+        .sort({ createdAt: -1 })
+        .lean(),
+      ResourceActivity.find({ user: userId })
+        .populate('resource')
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean(),
+      DigitalResource.find({ publication_status: 'PUBLISHED' })
+        .sort({ createdAt: -1 })
+        .limit(6)
+        .lean()
+    ]);
+
+    // Filter out bookmarks where resource might have been deleted
+    const validBookmarks = bookmarks
+      .filter(b => b.resource && b.resource.publication_status === 'PUBLISHED')
+      .map(b => ({
+        ...b.resource,
+        bookmarked_at: b.createdAt
+      }));
+
+    // 7. Summary Stats
     const stats = {
       active_seat_passes: activeSeats.length,
       borrowed_books_count: activeLoans.length,
       max_borrow_limit: 3,
       club_room_bookings: roomBookings.length,
       total_accumulated_fines: totalFine,
-      unread_notifications: unreadNotifsCount
+      unread_notifications: unreadNotifsCount,
+      saved_resources_count: validBookmarks.length
     };
 
     res.json({
@@ -126,8 +155,14 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
         returned_history: returnedLoans
       },
       rooms: roomBookings,
+      digital_resources: {
+        bookmarks: validBookmarks,
+        recent_activity: digitalActivities,
+        new_materials: recentMaterials
+      },
       notifications
     });
+
   } catch (err) {
     console.error('Student dashboard error:', err);
     res.status(500).json({ error: 'Failed to retrieve student dashboard data.' });

@@ -24,7 +24,20 @@ import {
   QrCode,
   FileText,
   AlertTriangle,
-  ChevronDown
+  ChevronDown,
+  GraduationCap,
+  Download,
+  ExternalLink,
+  History,
+  Wrench,
+  Code,
+  Video,
+  Sparkles,
+  Filter,
+  ArrowRight,
+  Eye,
+  BookMarked,
+  Tag
 } from 'lucide-react';
 import LibrarianPortal from './components/LibrarianPortal';
 
@@ -101,6 +114,25 @@ export default function App() {
   const [myRoomBookings, setMyRoomBookings] = useState([]);
   const [adminRoomRequests, setAdminRoomRequests] = useState([]);
   const [showAdminApprovalModal, setShowAdminApprovalModal] = useState(false);
+
+  // ==========================================
+  // DIGITAL RESOURCES DISCOVERY & ACCESS STATE
+  // ==========================================
+  const [digitalCategories, setDigitalCategories] = useState([]);
+  const [featuredResources, setFeaturedResources] = useState([]);
+  const [digitalResources, setDigitalResources] = useState([]);
+  const [digitalSearch, setDigitalSearch] = useState('');
+  const [digitalCategoryFilter, setDigitalCategoryFilter] = useState('ALL');
+  const [digitalDeptFilter, setDigitalDeptFilter] = useState('ALL');
+  const [digitalTypeFilter, setDigitalTypeFilter] = useState('ALL');
+  const [digitalSortBy, setDigitalSortBy] = useState('recent');
+  const [digitalPage, setDigitalPage] = useState(1);
+  const [digitalTotalPages, setDigitalTotalPages] = useState(1);
+  const [digitalTotalCount, setDigitalTotalCount] = useState(0);
+  const [loadingDigital, setLoadingDigital] = useState(false);
+  const [selectedDigitalResource, setSelectedDigitalResource] = useState(null);
+  const [loadingResourceDetails, setLoadingResourceDetails] = useState(false);
+
 
   // ==========================================
   // STUDENT DASHBOARD AGGREGATED STATE
@@ -222,10 +254,18 @@ export default function App() {
       loadBooks();
     } else if (activeTab === 'ROOMS') {
       loadRooms();
+    } else if (activeTab === 'DIGITAL_RESOURCES') {
+      loadDigitalCategories();
+      loadFeaturedResources();
+      loadDigitalCatalogue();
     } else if (activeTab === 'DASHBOARD') {
       loadStudentDashboard();
     }
-  }, [selectedFloor, selectedSession, selectedDate, user, activeTab, searchQuery, selectedCategory, availableOnly]);
+  }, [
+    selectedFloor, selectedSession, selectedDate, user, activeTab,
+    searchQuery, selectedCategory, availableOnly,
+    digitalSearch, digitalCategoryFilter, digitalDeptFilter, digitalTypeFilter, digitalSortBy, digitalPage
+  ]);
 
   // 4. Load User Activity
   useEffect(() => {
@@ -237,6 +277,7 @@ export default function App() {
       }
     }
   }, [user, token]);
+
 
   const loadSeatLayout = () => {
     setLoadingLayout(true);
@@ -345,6 +386,146 @@ export default function App() {
         setLoadingDashboard(false);
       });
   };
+
+  // ==========================================
+  // DIGITAL RESOURCES HANDLERS
+  // ==========================================
+  const loadDigitalCategories = () => {
+    fetch('/api/digital-resources/categories')
+      .then(res => res.json())
+      .then(data => {
+        if (data.categories) setDigitalCategories(data.categories);
+      })
+      .catch(err => console.error('Failed to load categories:', err));
+  };
+
+  const loadFeaturedResources = () => {
+    fetch('/api/digital-resources/featured')
+      .then(res => res.json())
+      .then(data => {
+        if (data.resources || data.featured) setFeaturedResources(data.resources || data.featured);
+      })
+      .catch(err => console.error('Failed to load featured:', err));
+  };
+
+  const loadDigitalCatalogue = () => {
+    setLoadingDigital(true);
+    const params = new URLSearchParams();
+    if (digitalSearch.trim()) params.append('search', digitalSearch.trim());
+    if (digitalCategoryFilter && digitalCategoryFilter !== 'ALL') params.append('category', digitalCategoryFilter);
+    if (digitalDeptFilter && digitalDeptFilter !== 'ALL') params.append('department', digitalDeptFilter);
+    if (digitalTypeFilter && digitalTypeFilter !== 'ALL') params.append('resource_type', digitalTypeFilter);
+    if (digitalSortBy) params.append('sort_by', digitalSortBy);
+    params.append('page', digitalPage);
+    params.append('limit', 12);
+
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+    fetch(`/api/digital-resources?${params.toString()}`, { headers })
+      .then(res => res.json())
+      .then(data => {
+        if (data.resources) {
+          setDigitalResources(data.resources);
+          setDigitalTotalPages(data.total_pages || 1);
+          setDigitalTotalCount(data.total || 0);
+        }
+        setLoadingDigital(false);
+      })
+      .catch(err => {
+        console.error('Failed to load catalogue:', err);
+        setLoadingDigital(false);
+      });
+  };
+
+  const handleToggleBookmark = async (resourceId, e) => {
+    if (e) e.stopPropagation();
+    if (!user || !token) {
+      setShowAuthModal(true);
+      showMessage('warning', 'Please sign in with your @bitsathy.ac.in account to bookmark resources.');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/digital-resources/${resourceId}/bookmark`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showMessage('error', data.error || 'Failed to update bookmark.');
+        return;
+      }
+      showMessage('success', data.message);
+
+      setDigitalResources(prev => prev.map(r => {
+        if (r._id === resourceId) {
+          return {
+            ...r,
+            is_bookmarked: data.is_bookmarked,
+            bookmarks_count: (r.bookmarks_count || 0) + (data.is_bookmarked ? 1 : -1)
+          };
+        }
+        return r;
+      }));
+
+      if (selectedDigitalResource && selectedDigitalResource._id === resourceId) {
+        setSelectedDigitalResource(prev => ({
+          ...prev,
+          is_bookmarked: data.is_bookmarked,
+          bookmarks_count: (prev.bookmarks_count || 0) + (data.is_bookmarked ? 1 : -1)
+        }));
+      }
+
+      if (activeTab === 'DASHBOARD') {
+        loadStudentDashboard();
+      }
+    } catch {
+      showMessage('error', 'Network error while updating bookmark.');
+    }
+  };
+
+  const handleOpenResourceDetails = (resourceId) => {
+    setLoadingResourceDetails(true);
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    fetch(`/api/digital-resources/${resourceId}`, { headers })
+      .then(res => res.json())
+      .then(data => {
+        if (data.resource) {
+          setSelectedDigitalResource(data.resource);
+        }
+        setLoadingResourceDetails(false);
+      })
+      .catch(() => setLoadingResourceDetails(false));
+  };
+
+  const handleAccessResource = async (resource, e) => {
+    if (e) e.stopPropagation();
+
+    if (resource.access_type !== 'OPEN_ACCESS' && !token) {
+      setShowAuthModal(true);
+      showMessage('warning', 'Institutional Access Required: Please sign in with your @bitsathy.ac.in account to view or download this material.');
+      return;
+    }
+
+    if (resource.external_url) {
+      window.open(resource.external_url, '_blank', 'noopener,noreferrer');
+      if (token) {
+        fetch(`/api/digital-resources/${resource._id}/access`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }).catch(() => {});
+      }
+      showMessage('info', `Redirecting to external academic repository: ${resource.publisher || 'Online Resource'}`);
+    } else if (resource.file_reference && (resource.file_reference.storage_path || resource.file_reference.filename)) {
+      const accessUrl = token
+        ? `/api/digital-resources/${resource._id}/access?token=${encodeURIComponent(token)}`
+        : `/api/digital-resources/${resource._id}/access`;
+      window.open(accessUrl, '_blank');
+      showMessage('success', `Opening document: ${resource.file_reference.original_name || resource.title}`);
+    } else {
+      showMessage('warning', 'No document or external link is configured for this resource.');
+    }
+  };
+
 
   // Google Sign-In handler (GIS ID Token or Institutional Email)
   const handleGoogleSignIn = async (credentialOrEmail, optionalName) => {
@@ -893,6 +1074,13 @@ export default function App() {
             >
               <Presentation size={15} />
               <span>Discussion Rooms</span>
+            </button>
+            <button
+              className={`nav-pill-btn ${activeTab === 'DIGITAL_RESOURCES' ? 'active' : ''}`}
+              onClick={() => setActiveTab('DIGITAL_RESOURCES')}
+            >
+              <GraduationCap size={15} />
+              <span>Digital Resources</span>
             </button>
             <button
               className={`nav-pill-btn ${activeTab === 'DASHBOARD' ? 'active' : ''}`}
@@ -1534,6 +1722,569 @@ export default function App() {
         )}
 
         {/* ============================================================== */}
+        {/* TAB: DIGITAL RESOURCES (Discovery, Categories & Catalogue)    */}
+        {/* ============================================================== */}
+        {activeTab === 'DIGITAL_RESOURCES' && (
+          <div className="digital-page-container">
+            {/* Header Section */}
+            <div className="digital-hero-banner">
+              <div>
+                <h2 className="digital-hero-title">
+                  <GraduationCap size={28} color="#2563eb" />
+                  <span>Digital Resources</span>
+                </h2>
+                <p className="digital-hero-subtitle">
+                  Explore academic materials, research publications, and learning resources curated for BITSathy engineering students.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', alignItems: 'flex-end', width: '100%', maxWidth: '440px' }}>
+                <div className="digital-search-container">
+                  <Search size={16} className="digital-search-icon" />
+                  <input
+                    type="text"
+                    className="digital-search-input"
+                    placeholder="Search by title, author, subject, or keyword..."
+                    value={digitalSearch}
+                    onChange={(e) => {
+                      setDigitalSearch(e.target.value);
+                      setDigitalPage(1);
+                    }}
+                  />
+                  {digitalSearch && (
+                    <button
+                      onClick={() => setDigitalSearch('')}
+                      style={{
+                        position: 'absolute',
+                        right: '0.75rem',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: 'var(--text-muted)'
+                      }}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                <div className="seats-remaining-box" style={{ width: 'fit-content' }}>
+                  <span>Published Catalogue</span>
+                  <span className="seats-remaining-badge">[ {digitalTotalCount} materials ]</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Featured or Recently Added Section */}
+            {featuredResources.length > 0 && !digitalSearch && digitalCategoryFilter === 'ALL' && (
+              <section className="featured-resources-section">
+                <div className="featured-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Sparkles size={18} color="#d97706" />
+                    <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
+                      Featured & Popular Resources
+                    </h3>
+                  </div>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                    High-engagement picks
+                  </span>
+                </div>
+
+                <div className="featured-scroll-container">
+                  {featuredResources.map(res => (
+                    <div
+                      key={res._id}
+                      className="featured-card"
+                      onClick={() => handleOpenResourceDetails(res._id)}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                          <span className="resource-type-pill" style={{ fontSize: '0.62rem' }}>
+                            {res.resource_type}
+                          </span>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                            {res.department}
+                          </span>
+                        </div>
+                        <h4 style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.35, marginBottom: '0.35rem' }}>
+                          {res.title}
+                        </h4>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.65rem' }}>
+                          {res.author || res.publisher}
+                        </p>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.5rem', borderTop: '1px solid var(--border-light)' }}>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                          <Eye size={12} /> {res.views_count} views
+                        </span>
+                        <button
+                          className="sketch-action-btn"
+                          style={{ padding: '0.25rem 0.6rem', fontSize: '0.72rem' }}
+                          onClick={(e) => handleAccessResource(res, e)}
+                        >
+                          {res.external_url ? <ExternalLink size={12} /> : <Download size={12} />}
+                          <span>{res.external_url ? 'Visit Link' : 'Open PDF'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* 8 Resource Categories Grid */}
+            <section>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Layers size={18} color="#2563eb" />
+                  <span>Academic Resource Categories (8)</span>
+                </h3>
+                {digitalCategoryFilter !== 'ALL' && (
+                  <button
+                    className="sketch-action-btn"
+                    style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}
+                    onClick={() => {
+                      setDigitalCategoryFilter('ALL');
+                      setDigitalPage(1);
+                    }}
+                  >
+                    <RotateCcw size={13} />
+                    <span>View All Categories</span>
+                  </button>
+                )}
+              </div>
+
+              <div className="digital-categories-grid">
+                {digitalCategories.map(cat => {
+                  const isActive = digitalCategoryFilter === cat.id;
+                  return (
+                    <div
+                      key={cat.id}
+                      className={`digital-category-card ${isActive ? 'active' : ''}`}
+                      onClick={() => {
+                        setDigitalCategoryFilter(isActive ? 'ALL' : cat.id);
+                        setDigitalPage(1);
+                      }}
+                    >
+                      <div>
+                        <div
+                          className="category-icon-wrapper"
+                          style={{
+                            background: isActive ? '#0f172a' : `${cat.accent_color}15`,
+                            color: isActive ? '#ffffff' : cat.accent_color
+                          }}
+                        >
+                          {cat.icon === 'BookOpen' && <BookOpen size={20} />}
+                          {cat.icon === 'FileText' && <FileText size={20} />}
+                          {cat.icon === 'History' && <History size={20} />}
+                          {cat.icon === 'Layers' && <Layers size={20} />}
+                          {cat.icon === 'Wrench' && <Wrench size={20} />}
+                          {cat.icon === 'Code' && <Code size={20} />}
+                          {cat.icon === 'Video' && <Video size={20} />}
+                          {cat.icon === 'Bookmark' && <Bookmark size={20} />}
+                        </div>
+
+                        <h4 className="category-card-title">{cat.title}</h4>
+                        <p className="category-card-desc">{cat.description}</p>
+                      </div>
+
+                      <div
+                        className="category-count-badge"
+                        style={{
+                          background: isActive ? '#0f172a' : '#f1f5f9',
+                          color: isActive ? '#ffffff' : '#0f172a',
+                          border: `1px solid ${isActive ? '#0f172a' : 'var(--border-light)'}`
+                        }}
+                      >
+                        <span>{cat.resources_count} available</span>
+                        {isActive && <span>✓ Selected</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* Filter and Sorting Toolbar */}
+            <section className="digital-filter-toolbar">
+              <div className="digital-filter-group">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>
+                  <Filter size={15} />
+                  <span>Filter by:</span>
+                </div>
+
+                <select
+                  className="digital-select"
+                  value={digitalCategoryFilter}
+                  onChange={(e) => {
+                    setDigitalCategoryFilter(e.target.value);
+                    setDigitalPage(1);
+                  }}
+                >
+                  <option value="ALL">All Categories</option>
+                  {digitalCategories.map(c => (
+                    <option key={c.id} value={c.id}>{c.title}</option>
+                  ))}
+                </select>
+
+                <select
+                  className="digital-select"
+                  value={digitalDeptFilter}
+                  onChange={(e) => {
+                    setDigitalDeptFilter(e.target.value);
+                    setDigitalPage(1);
+                  }}
+                >
+                  <option value="ALL">All Departments</option>
+                  <option value="Computer Science and Engineering">CSE</option>
+                  <option value="Information Technology">IT</option>
+                  <option value="Electronics and Communication Engineering">ECE</option>
+                  <option value="Artificial Intelligence & Data Science">AI & DS</option>
+                  <option value="Electrical and Electronics Engineering">EEE</option>
+                  <option value="Mechanical Engineering">Mechanical</option>
+                </select>
+
+                <select
+                  className="digital-select"
+                  value={digitalTypeFilter}
+                  onChange={(e) => {
+                    setDigitalTypeFilter(e.target.value);
+                    setDigitalPage(1);
+                  }}
+                >
+                  <option value="ALL">All Formats & Types</option>
+                  <option value="PDF">PDF Document</option>
+                  <option value="EBOOK">E-book</option>
+                  <option value="JOURNAL">Journal Reprints</option>
+                  <option value="VIDEO">Video Course</option>
+                  <option value="EXTERNAL_LINK">External Academic Link</option>
+                  <option value="LAB_MANUAL">Lab Manual</option>
+                  <option value="TUTORIAL">Technical Tutorial</option>
+                </select>
+              </div>
+
+              <div className="digital-filter-group">
+                <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Sort by:</span>
+                <select
+                  className="digital-select"
+                  value={digitalSortBy}
+                  onChange={(e) => {
+                    setDigitalSortBy(e.target.value);
+                    setDigitalPage(1);
+                  }}
+                >
+                  <option value="recent">Recently Added</option>
+                  <option value="popular">Most Viewed</option>
+                  <option value="downloads">Most Downloaded</option>
+                  <option value="title_asc">Title (A to Z)</option>
+                </select>
+
+                {(digitalSearch || digitalCategoryFilter !== 'ALL' || digitalDeptFilter !== 'ALL' || digitalTypeFilter !== 'ALL') && (
+                  <button
+                    className="sketch-action-btn"
+                    style={{ fontSize: '0.78rem', padding: '0.35rem 0.75rem' }}
+                    onClick={() => {
+                      setDigitalSearch('');
+                      setDigitalCategoryFilter('ALL');
+                      setDigitalDeptFilter('ALL');
+                      setDigitalTypeFilter('ALL');
+                      setDigitalSortBy('recent');
+                      setDigitalPage(1);
+                    }}
+                  >
+                    Reset Filters
+                  </button>
+                )}
+              </div>
+            </section>
+
+            {/* Resource Catalogue Section */}
+            {loadingDigital ? (
+              <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                Loading Digital Academic Catalogue...
+              </div>
+            ) : digitalResources.length === 0 ? (
+              <div style={{
+                background: 'var(--bg-surface)',
+                border: '1.5px dashed var(--border-light)',
+                borderRadius: 'var(--radius-lg)',
+                padding: '3.5rem 2rem',
+                textAlign: 'center'
+              }}>
+                <GraduationCap size={48} color="#94a3b8" style={{ margin: '0 auto 1rem' }} />
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.5rem' }}>
+                  No educational materials found
+                </h3>
+                <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', maxWidth: '440px', margin: '0 auto 1.25rem' }}>
+                  No digital resources matched your search query or selected category filter.
+                </p>
+                <button
+                  className="sketch-action-btn primary"
+                  onClick={() => {
+                    setDigitalSearch('');
+                    setDigitalCategoryFilter('ALL');
+                    setDigitalDeptFilter('ALL');
+                    setDigitalTypeFilter('ALL');
+                    setDigitalPage(1);
+                  }}
+                >
+                  Reset All Filters
+                </button>
+              </div>
+            ) : (
+              <div>
+                <div className="digital-catalogue-grid">
+                  {digitalResources.map(res => (
+                    <div
+                      key={res._id}
+                      className="digital-card"
+                      onClick={() => handleOpenResourceDetails(res._id)}
+                    >
+                      <div>
+                        <div className="digital-card-top">
+                          <div className="resource-badge-group">
+                            <span className="resource-type-pill">
+                              {res.resource_type === 'PDF' && <FileText size={11} />}
+                              {res.resource_type === 'EBOOK' && <BookOpen size={11} />}
+                              {res.resource_type === 'JOURNAL' && <FileText size={11} />}
+                              {res.resource_type === 'VIDEO' && <Video size={11} />}
+                              {res.resource_type === 'EXTERNAL_LINK' && <ExternalLink size={11} />}
+                              {res.resource_type === 'LAB_MANUAL' && <Wrench size={11} />}
+                              {res.resource_type === 'TUTORIAL' && <Code size={11} />}
+                              <span>{res.resource_type}</span>
+                            </span>
+
+                            <span className={`access-type-pill ${res.access_type.toLowerCase()}`}>
+                              {res.access_type === 'OPEN_ACCESS' ? '🌐 Open Access' : res.access_type === 'INSTITUTIONAL' ? '🏛️ Institutional' : '🔒 Restricted'}
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            className={`bookmark-icon-btn ${res.is_bookmarked ? 'bookmarked' : ''}`}
+                            onClick={(e) => handleToggleBookmark(res._id, e)}
+                            title={res.is_bookmarked ? 'Remove Bookmark' : 'Bookmark this Resource'}
+                          >
+                            <Bookmark size={16} fill={res.is_bookmarked ? '#d97706' : 'none'} />
+                          </button>
+                        </div>
+
+                        <h3 className="digital-card-title" title={res.title}>
+                          {res.title}
+                        </h3>
+
+                        <div className="digital-card-meta">
+                          <div><strong>Author:</strong> {res.author || 'BIT Academic Faculty'}</div>
+                          <div><strong>Department:</strong> {res.department}</div>
+                          <div><strong>Category:</strong> {res.category}</div>
+                        </div>
+
+                        <p className="digital-card-desc">
+                          {res.description}
+                        </p>
+
+                        {res.tags && res.tags.length > 0 && (
+                          <div className="digital-tags-list">
+                            {res.tags.slice(0, 4).map((t, idx) => (
+                              <span key={idx} className="digital-tag-chip">
+                                #{t}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <div className="digital-card-actions">
+                          <div className="digital-card-metrics">
+                            <span title="Total Views"><Eye size={13} style={{ verticalAlign: 'middle', marginRight: 3 }} />{res.views_count}</span>
+                            <span title="Total Downloads"><Download size={13} style={{ verticalAlign: 'middle', marginRight: 3 }} />{res.downloads_count}</span>
+                          </div>
+
+                          <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.45rem' }}>
+                            <button
+                              type="button"
+                              className="sketch-action-btn"
+                              style={{ padding: '0.35rem 0.7rem', fontSize: '0.78rem' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenResourceDetails(res._id);
+                              }}
+                            >
+                              Details
+                            </button>
+
+                            <button
+                              type="button"
+                              className="sketch-action-btn primary"
+                              style={{ padding: '0.35rem 0.85rem', fontSize: '0.78rem' }}
+                              onClick={(e) => handleAccessResource(res, e)}
+                            >
+                              {res.external_url ? <ExternalLink size={13} /> : <Download size={13} />}
+                              <span>{res.external_url ? 'Visit' : 'Access'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Pagination Controls */}
+                {digitalTotalPages > 1 && (
+                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginTop: '2rem' }}>
+                    <button
+                      className="sketch-action-btn"
+                      disabled={digitalPage <= 1}
+                      onClick={() => setDigitalPage(prev => Math.max(1, prev - 1))}
+                    >
+                      ← Previous Page
+                    </button>
+                    <span style={{ fontSize: '0.88rem', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                      Page {digitalPage} of {digitalTotalPages}
+                    </span>
+                    <button
+                      className="sketch-action-btn"
+                      disabled={digitalPage >= digitalTotalPages}
+                      onClick={() => setDigitalPage(prev => Math.min(digitalTotalPages, prev + 1))}
+                    >
+                      Next Page →
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Resource Details Modal */}
+            {selectedDigitalResource && (
+              <div className="digital-modal-overlay" onClick={() => setSelectedDigitalResource(null)}>
+                <div className="digital-modal-window" onClick={(e) => e.stopPropagation()}>
+                  <div className="digital-modal-header">
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                        <span className="resource-type-pill">{selectedDigitalResource.resource_type}</span>
+                        <span className={`access-type-pill ${selectedDigitalResource.access_type.toLowerCase()}`}>
+                          {selectedDigitalResource.access_type}
+                        </span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                          Published: {selectedDigitalResource.publication_year || '2024'}
+                        </span>
+                      </div>
+                      <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.3 }}>
+                        {selectedDigitalResource.title}
+                      </h2>
+                    </div>
+
+                    <button
+                      onClick={() => setSelectedDigitalResource(null)}
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px' }}
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  <div className="digital-modal-body">
+                    <div>
+                      <h4 style={{ fontSize: '0.85rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
+                        Description & Academic Scope
+                      </h4>
+                      <p style={{ fontSize: '0.92rem', color: '#334155', lineHeight: 1.6 }}>
+                        {selectedDigitalResource.description}
+                      </p>
+                    </div>
+
+                    <div className="digital-modal-meta-grid">
+                      <div>
+                        <span className="meta-item-label">Author / Creator</span>
+                        <span className="meta-item-value">{selectedDigitalResource.author || 'BITSathy Academic Staff'}</span>
+                      </div>
+                      <div>
+                        <span className="meta-item-label">Publisher / Institution</span>
+                        <span className="meta-item-value">{selectedDigitalResource.publisher || 'Bannari Amman Institute of Technology'}</span>
+                      </div>
+                      <div>
+                        <span className="meta-item-label">Category</span>
+                        <span className="meta-item-value">{selectedDigitalResource.category}</span>
+                      </div>
+                      <div>
+                        <span className="meta-item-label">Subject Domain</span>
+                        <span className="meta-item-value">{selectedDigitalResource.subject}</span>
+                      </div>
+                      <div>
+                        <span className="meta-item-label">Department</span>
+                        <span className="meta-item-value">{selectedDigitalResource.department}</span>
+                      </div>
+                      <div>
+                        <span className="meta-item-label">Access Level</span>
+                        <span className="meta-item-value">{selectedDigitalResource.access_type}</span>
+                      </div>
+                    </div>
+
+                    {selectedDigitalResource.tags && selectedDigitalResource.tags.length > 0 && (
+                      <div>
+                        <span className="meta-item-label" style={{ marginBottom: '0.4rem' }}>Subject Tags & Keywords</span>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                          {selectedDigitalResource.tags.map((t, idx) => (
+                            <span key={idx} className="digital-tag-chip" style={{ fontSize: '0.78rem' }}>
+                              #{t}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '8px' }}>
+                      <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <Eye size={15} /> <strong>{selectedDigitalResource.views_count}</strong> Total Views
+                      </span>
+                      <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <Download size={15} /> <strong>{selectedDigitalResource.downloads_count}</strong> Downloads
+                      </span>
+                      <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <Bookmark size={15} /> <strong>{selectedDigitalResource.bookmarks_count}</strong> Students Bookmarked
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="digital-modal-footer">
+                    <button
+                      type="button"
+                      className={`sketch-action-btn ${selectedDigitalResource.is_bookmarked ? 'danger' : ''}`}
+                      onClick={(e) => handleToggleBookmark(selectedDigitalResource._id, e)}
+                    >
+                      <Bookmark size={15} fill={selectedDigitalResource.is_bookmarked ? '#ffffff' : 'none'} />
+                      <span>{selectedDigitalResource.is_bookmarked ? 'Bookmarked' : 'Add to Bookmarks'}</span>
+                    </button>
+
+                    <div style={{ display: 'flex', gap: '0.75rem' }}>
+                      <button
+                        type="button"
+                        className="sketch-action-btn"
+                        onClick={() => setSelectedDigitalResource(null)}
+                      >
+                        Close
+                      </button>
+
+                      <button
+                        type="button"
+                        className="sketch-action-btn primary"
+                        onClick={(e) => handleAccessResource(selectedDigitalResource, e)}
+                      >
+                        {selectedDigitalResource.external_url ? <ExternalLink size={15} /> : <Download size={15} />}
+                        <span>{selectedDigitalResource.external_url ? 'Visit External Link' : 'Open / Download Document'}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ============================================================== */}
         {/* TAB 4: STUDENT DASHBOARD (Centralized Activity Hub)           */}
         {/* ============================================================== */}
         {activeTab === 'DASHBOARD' && (
@@ -1626,6 +2377,15 @@ export default function App() {
                       <div className="metric-sub">Rate: ₹2.00 / overdue day</div>
                     </div>
                     <ShieldCheck size={36} color={dashboardData.stats.total_accumulated_fines > 0 ? '#ef4444' : '#10b981'} />
+                  </div>
+
+                  <div className="dashboard-metric-card">
+                    <div>
+                      <div className="metric-label">Saved Resources</div>
+                      <div className="metric-num">{dashboardData.stats.saved_resources_count || 0}</div>
+                      <div className="metric-sub">Bookmarked academic materials</div>
+                    </div>
+                    <Bookmark size={36} color="#d97706" />
                   </div>
                 </div>
 
@@ -1861,7 +2621,117 @@ export default function App() {
                         ))
                       )}
                     </div>
+
+                    {/* SECTION: BOOKMARKED DIGITAL RESOURCES */}
+                    <div className="dashboard-card-section">
+                      <div className="section-title-bar">
+                        <h3 className="section-heading">
+                          <Bookmark size={20} color="#d97706" />
+                          <span>My Bookmarked Digital Resources ({dashboardData.digital_resources?.bookmarks?.length || 0})</span>
+                        </h3>
+                        <button
+                          className="btn-secondary"
+                          style={{ padding: '0.35rem 0.75rem', fontSize: '0.78rem' }}
+                          onClick={() => setActiveTab('DIGITAL_RESOURCES')}
+                        >
+                          Explore Catalogue
+                        </button>
+                      </div>
+
+                      {!dashboardData.digital_resources?.bookmarks || dashboardData.digital_resources.bookmarks.length === 0 ? (
+                        <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', background: '#f8fafc', borderRadius: '8px' }}>
+                          <p style={{ fontWeight: 600, marginBottom: '0.35rem' }}>No bookmarked digital resources yet.</p>
+                          <p style={{ fontSize: '0.8rem' }}>Browse e-books, research journals, or past question papers and click the bookmark icon to save them here.</p>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.85rem' }}>
+                          {dashboardData.digital_resources.bookmarks.map(bm => (
+                            <div key={bm._id} className="digital-card" style={{ padding: '1rem' }}>
+                              <div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                                  <span className="resource-type-pill" style={{ fontSize: '0.62rem' }}>{bm.resource_type}</span>
+                                  <button
+                                    type="button"
+                                    className="bookmark-icon-btn bookmarked"
+                                    style={{ width: 28, height: 28 }}
+                                    onClick={() => handleToggleBookmark(bm._id)}
+                                    title="Remove from Bookmarks"
+                                  >
+                                    <Bookmark size={14} fill="#d97706" />
+                                  </button>
+                                </div>
+                                <h4 style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.3, marginBottom: '0.25rem' }}>
+                                  {bm.title}
+                                </h4>
+                                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.65rem' }}>
+                                  {bm.category} • {bm.department}
+                                </p>
+                              </div>
+
+                              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border-light)' }}>
+                                <button
+                                  className="sketch-action-btn primary"
+                                  style={{ padding: '0.3rem 0.75rem', fontSize: '0.75rem' }}
+                                  onClick={(e) => handleAccessResource(bm, e)}
+                                >
+                                  {bm.external_url ? <ExternalLink size={12} /> : <Download size={12} />}
+                                  <span>{bm.external_url ? 'Visit Link' : 'Open Document'}</span>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* SECTION: RECENT DIGITAL ACCESS ACTIVITY */}
+                    {dashboardData.digital_resources?.recent_activity?.length > 0 && (
+                      <div className="dashboard-card-section">
+                        <div className="section-title-bar">
+                          <h3 className="section-heading">
+                            <History size={18} color="#059669" />
+                            <span>Recent Digital Learning History</span>
+                          </h3>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          {dashboardData.digital_resources.recent_activity.map(act => (
+                            <div key={act._id} style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '0.6rem 0.85rem',
+                              background: '#f8fafc',
+                              border: '1px solid var(--border-light)',
+                              borderRadius: '8px',
+                              fontSize: '0.8rem'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                                <span style={{
+                                  fontSize: '0.65rem',
+                                  fontWeight: 800,
+                                  fontFamily: 'var(--font-mono)',
+                                  padding: '0.15rem 0.45rem',
+                                  borderRadius: '4px',
+                                  background: act.activity_type === 'DOWNLOAD' ? '#ecfdf5' : '#eff6ff',
+                                  color: act.activity_type === 'DOWNLOAD' ? '#047857' : '#1d4ed8'
+                                }}>
+                                  {act.activity_type}
+                                </span>
+                                <span style={{ fontWeight: 600, color: '#0f172a' }}>
+                                  {act.resource?.title || 'Academic Resource'}
+                                </span>
+                              </div>
+                              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                {new Date(act.createdAt).toLocaleDateString()}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
+
 
                   {/* RIGHT COLUMN: NOTIFICATIONS & RULES */}
                   <div>

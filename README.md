@@ -24,10 +24,28 @@ A Central Library Management System built for **Bannari Amman Institute of Techn
 4. **Student Booking Dashboard**
    - Personal active reservations, live passes, loan history, fine calculators, and in-app notification center.
    - Profile management with Roll Number, Department, and Year of study.
+   - Integrated personal digital resources bookmark shelf and recent access activity.
 
-5. **Librarian Operations Portal**
-   - Dedicated 12-section administrative dashboard for authorized library staff (`LIBRARIAN` and `ADMIN`).
-   - Operational overview KPIs: floor occupancy, circulation metrics, overdue loans, room approvals.
+5. **Digital Resources Discovery & Management Module**
+   - Academic discovery hub organized into **8 prescribed categories**:
+     1. *E-books and Textbooks* (Standard reference volumes & curriculum texts)
+     2. *Research Papers and Journals* (IEEE, CVPR, NeurIPS reprints)
+     3. *Previous-Year Question Papers* (Autonomous & Anna University end-semester question banks)
+     4. *Lecture Notes and Study Materials* (Faculty unit-wise slides & formula sheets)
+     5. *Laboratory Manuals* (Prescribed observation guides & viva questions)
+     6. *Programming and Technical Tutorials* (Full-Stack, React, Node.js, PyTorch)
+     7. *Online Courses and Educational Videos* (NPTEL, SWAYAM, MIT OpenCourseWare)
+     8. *Other Academic Resources* (GATE CS guides, BITSathy LaTeX report templates)
+   - Live multi-field keyword search (title, author, subject, tags).
+   - Filter by category, department, subject, and resource format (PDF, E-book, Journal, Video, External Link, Lab Manual, Tutorial).
+   - Detailed modal with complete academic metadata and engagement metrics (views, downloads, bookmarks).
+   - Secure file streaming with MIME validation and safe external link redirection.
+   - Persistent per-student bookmarking with sync across devices.
+   - Dedicated Librarian Management Console for curating, uploading files (Multer), publishing, drafting, archiving, and deleting entries with audit logs.
+
+6. **Librarian Operations Portal**
+   - Dedicated administrative dashboard for authorized library staff (`LIBRARIAN` and `ADMIN`).
+   - Operational overview KPIs: floor occupancy, circulation metrics, overdue loans, room approvals, and digital resource statistics.
    - Administrative seat cancellation with mandatory reason and student notification.
    - Seat maintenance blocking/unblocking.
    - Safe, idempotent daily seat availability reset engine (preserves permanent physical seat layout).
@@ -38,10 +56,11 @@ A Central Library Management System built for **Bannari Amman Institute of Techn
    - Tamper-evident administrative audit log.
    - Floor-wise, gender-zone, and fine collection operational reports.
 
-6. **Authentication & Security**
+7. **Authentication & Security**
    - Google OAuth 2.0 / OpenID Connect restricted to `@bitsathy.ac.in` institutional domain.
    - Role-Based Access Control (RBAC): `STUDENT`, `LIBRARIAN`, `ADMIN`.
    - JWT session management and protected REST API endpoints.
+
 
 ---
 

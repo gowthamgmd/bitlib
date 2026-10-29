@@ -140,13 +140,89 @@ const notificationSchema = new mongoose.Schema({
   is_read: { type: Boolean, default: false }
 }, { timestamps: true });
 
+// Digital Resource Schema
+const digitalResourceSchema = new mongoose.Schema({
+  title: { type: String, required: true, trim: true },
+  description: { type: String, trim: true, default: '' },
+  author: { type: String, trim: true, default: '' },
+  publisher: { type: String, trim: true, default: '' },
+  category: {
+    type: String,
+    enum: [
+      'E-books and Textbooks',
+      'Research Papers and Journals',
+      'Previous-Year Question Papers',
+      'Lecture Notes and Study Materials',
+      'Laboratory Manuals',
+      'Programming and Technical Tutorials',
+      'Online Courses and Educational Videos',
+      'Other Academic Resources'
+    ],
+    required: true
+  },
+  subject: { type: String, trim: true, default: 'General' },
+  department: { type: String, trim: true, default: 'All Departments' },
+  resource_type: {
+    type: String,
+    enum: ['PDF', 'EBOOK', 'JOURNAL', 'VIDEO', 'EXTERNAL_LINK', 'LAB_MANUAL', 'TUTORIAL'],
+    default: 'PDF'
+  },
+  publication_year: { type: Number, default: () => new Date().getFullYear() },
+  cover_image: { type: String, default: '' },
+  file_reference: {
+    filename: { type: String },
+    original_name: { type: String },
+    mime_type: { type: String },
+    file_size: { type: Number },
+    storage_path: { type: String }
+  },
+  external_url: { type: String, trim: true, default: '' },
+  access_type: {
+    type: String,
+    enum: ['OPEN_ACCESS', 'INSTITUTIONAL', 'RESTRICTED'],
+    default: 'INSTITUTIONAL'
+  },
+  publication_status: {
+    type: String,
+    enum: ['PUBLISHED', 'DRAFT', 'ARCHIVED'],
+    default: 'PUBLISHED'
+  },
+  tags: [{ type: String, trim: true }],
+  views_count: { type: Number, default: 0 },
+  downloads_count: { type: Number, default: 0 },
+  bookmarks_count: { type: Number, default: 0 },
+  created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  updated_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+}, { timestamps: true });
+
+digitalResourceSchema.index({ category: 1, publication_status: 1 });
+digitalResourceSchema.index({ department: 1, publication_status: 1 });
+digitalResourceSchema.index({ title: 'text', description: 'text', author: 'text', subject: 'text', tags: 'text' });
+
+// Resource Bookmark Schema
+const resourceBookmarkSchema = new mongoose.Schema({
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  resource: { type: mongoose.Schema.Types.ObjectId, ref: 'DigitalResource', required: true }
+}, { timestamps: true });
+
+resourceBookmarkSchema.index({ user: 1, resource: 1 }, { unique: true });
+
+// Resource Activity / Access Log Schema
+const resourceActivitySchema = new mongoose.Schema({
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  resource: { type: mongoose.Schema.Types.ObjectId, ref: 'DigitalResource', required: true },
+  activity_type: { type: String, enum: ['VIEW', 'DOWNLOAD', 'EXTERNAL_VISIT'], required: true }
+}, { timestamps: true });
+
+resourceActivitySchema.index({ user: 1, createdAt: -1 });
+
 // Audit Log Schema
 const auditLogSchema = new mongoose.Schema({
   actor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   actor_name: { type: String, default: 'System Automated Job' },
   actor_role: { type: String, default: 'SYSTEM' },
   action: { type: String, required: true },
-  category: { type: String, enum: ['SEAT', 'BOOK', 'ROOM', 'SYSTEM'], required: true },
+  category: { type: String, enum: ['SEAT', 'BOOK', 'ROOM', 'DIGITAL_RESOURCE', 'SYSTEM'], required: true },
   target_id: { type: String },
   target_description: { type: String, required: true },
   reason: { type: String, default: '' },
@@ -165,6 +241,9 @@ const DiscussionRoom = mongoose.model('DiscussionRoom', discussionRoomSchema);
 const RoomBooking = mongoose.model('RoomBooking', roomBookingSchema);
 const Notification = mongoose.model('Notification', notificationSchema);
 const AuditLog = mongoose.model('AuditLog', auditLogSchema);
+const DigitalResource = mongoose.model('DigitalResource', digitalResourceSchema);
+const ResourceBookmark = mongoose.model('ResourceBookmark', resourceBookmarkSchema);
+const ResourceActivity = mongoose.model('ResourceActivity', resourceActivitySchema);
 
 module.exports = {
   User,
@@ -178,5 +257,8 @@ module.exports = {
   DiscussionRoom,
   RoomBooking,
   Notification,
-  AuditLog
+  AuditLog,
+  DigitalResource,
+  ResourceBookmark,
+  ResourceActivity
 };

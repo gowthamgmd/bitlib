@@ -21,6 +21,7 @@ const roomRoutes = require('./routes/rooms');
 const studentRoutes = require('./routes/student');
 const adminRoutes = require('./routes/admin');
 const librarianRoutes = require('./routes/librarian');
+const digitalResourceRoutes = require('./routes/digitalResources');
 const { performDailySeatReset } = require('./services/seatReset');
 
 app.use('/api/auth', authRoutes);
@@ -30,6 +31,7 @@ app.use('/api/rooms', roomRoutes);
 app.use('/api/student', studentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/librarian', librarianRoutes);
+app.use('/api/digital-resources', digitalResourceRoutes);
 
 // Automatic scheduled background job for daily seat availability reset
 setInterval(async () => {
