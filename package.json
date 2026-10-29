@@ -2,9 +2,13 @@
   "name": "bitlib",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "server/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server/index.js",
+    "build": "npm install && npm install --prefix client && npm run build --prefix client",
+    "server": "node server/index.js",
+    "client": "npm run dev --prefix client",
+    "test": "node server/scratch/test_digital_resources.js"
   },
   "keywords": [],
   "author": "",

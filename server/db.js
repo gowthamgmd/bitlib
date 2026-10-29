@@ -9,7 +9,8 @@ const {
   Book,
   BookCopy,
   DiscussionRoom,
-  Notification
+  Notification,
+  DigitalResource
 } = require('./models');
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/bitlib';
@@ -476,6 +477,395 @@ async function seedInitialData() {
         type: 'SYSTEM'
       }
     ]);
+  }
+
+  // 8. Seed Initial Digital Resources
+  const drCount = await DigitalResource.countDocuments();
+  if (drCount === 0) {
+    const adminUser = await User.findOne({ role: 'ADMIN' });
+    const adminId = adminUser ? adminUser._id : null;
+    const initialResources = [
+      {
+        title: "Database System Concepts (7th Edition)",
+        description: "Comprehensive authoritative university textbook on relational database systems, indexing, query optimization, transaction processing, and concurrency control.",
+        author: "Abraham Silberschatz, Henry F. Korth, S. Sudarshan",
+        publisher: "McGraw-Hill Education",
+        category: "E-books and Textbooks",
+        subject: "Database Management Systems",
+        department: "Computer Science and Engineering",
+        resource_type: "PDF",
+        publication_year: 2020,
+        cover_image: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=400",
+        file_reference: {
+          filename: "db_system_concepts_silberschatz.pdf",
+          original_name: "db_system_concepts_silberschatz.pdf",
+          mime_type: "application/pdf",
+          file_size: 989,
+          storage_path: "uploads/digital-resources/db_system_concepts_silberschatz.pdf"
+        },
+        access_type: "INSTITUTIONAL",
+        publication_status: "PUBLISHED",
+        tags: ["DBMS", "Textbook", "SQL", "Relational Database", "CS8492"],
+        views_count: 512,
+        downloads_count: 240,
+        created_by: adminId
+      },
+      {
+        title: "Computer Networking: A Top-Down Approach (8th Edition)",
+        description: "Classic networking textbook explaining network protocols from the Application Layer down to Physical layer with internet architecture and wireless systems.",
+        author: "James F. Kurose, Keith W. Ross",
+        publisher: "Pearson",
+        category: "E-books and Textbooks",
+        subject: "Computer Networks",
+        department: "Information Technology",
+        resource_type: "PDF",
+        publication_year: 2021,
+        cover_image: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&q=80&w=400",
+        file_reference: {
+          filename: "kurose_ross_computer_networking.pdf",
+          original_name: "kurose_ross_computer_networking.pdf",
+          mime_type: "application/pdf",
+          file_size: 993,
+          storage_path: "uploads/digital-resources/kurose_ross_computer_networking.pdf"
+        },
+        access_type: "INSTITUTIONAL",
+        publication_status: "PUBLISHED",
+        tags: ["Networking", "TCP/IP", "Sockets", "Protocols", "Textbook"],
+        views_count: 388,
+        downloads_count: 175,
+        created_by: adminId
+      },
+      {
+        title: "Deep Residual Learning for Image Recognition (ResNet Paper)",
+        description: "Seminal CVPR research paper introducing deep residual neural networks (ResNet-50, ResNet-101) to solve the degradation problem in ultra-deep networks.",
+        author: "Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun",
+        publisher: "IEEE / CVPR",
+        category: "Research Papers and Journals",
+        subject: "Computer Vision & Deep Learning",
+        department: "Artificial Intelligence & Data Science",
+        resource_type: "JOURNAL",
+        publication_year: 2016,
+        cover_image: "https://images.unsplash.com/photo-1507146426996-ef0538821e1b?auto=format&fit=crop&q=80&w=400",
+        file_reference: {
+          filename: "resnet_deep_residual_learning_he.pdf",
+          original_name: "resnet_deep_residual_learning_he.pdf",
+          mime_type: "application/pdf",
+          file_size: 1001,
+          storage_path: "uploads/digital-resources/resnet_deep_residual_learning_he.pdf"
+        },
+        external_url: "https://arxiv.org/abs/1512.03385",
+        access_type: "OPEN_ACCESS",
+        publication_status: "PUBLISHED",
+        tags: ["ResNet", "Deep Learning", "CVPR", "Research", "Computer Vision"],
+        views_count: 730,
+        downloads_count: 420,
+        created_by: adminId
+      },
+      {
+        title: "Attention Is All You Need (Transformer Architecture)",
+        description: "The foundational research paper introducing the Transformer neural network architecture based solely on self-attention mechanisms, powering GPT and modern LLMs.",
+        author: "Ashish Vaswani, Noam Shazeer, Niki Parmar, et al.",
+        publisher: "NeurIPS",
+        category: "Research Papers and Journals",
+        subject: "Natural Language Processing",
+        department: "Computer Science and Engineering",
+        resource_type: "JOURNAL",
+        publication_year: 2017,
+        cover_image: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=400",
+        external_url: "https://arxiv.org/abs/1706.03762",
+        access_type: "OPEN_ACCESS",
+        publication_status: "PUBLISHED",
+        tags: ["Transformer", "Attention", "NeurIPS", "LLM", "NLP"],
+        views_count: 1205,
+        downloads_count: 0,
+        created_by: adminId
+      },
+      {
+        title: "CS8492 Database Management Systems - Autonomous End Sem Exam Nov/Dec 2024",
+        description: "Official BITSathy autonomous end-semester examination question paper with solution outlines, schema diagrams, and SQL problem answers.",
+        author: "Office of the Controller of Examinations",
+        publisher: "BITSathy Academic Autonomous Division",
+        category: "Previous-Year Question Papers",
+        subject: "Database Management Systems",
+        department: "Computer Science and Engineering",
+        resource_type: "PDF",
+        publication_year: 2024,
+        cover_image: "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&q=80&w=400",
+        file_reference: {
+          filename: "bitsathy_dbms_nov_dec_2024.pdf",
+          original_name: "bitsathy_dbms_nov_dec_2024.pdf",
+          mime_type: "application/pdf",
+          file_size: 996,
+          storage_path: "uploads/digital-resources/bitsathy_dbms_nov_dec_2024.pdf"
+        },
+        access_type: "INSTITUTIONAL",
+        publication_status: "PUBLISHED",
+        tags: ["Question Paper", "Autonomous Exam", "DBMS", "End Sem", "2024"],
+        views_count: 642,
+        downloads_count: 510,
+        created_by: adminId
+      },
+      {
+        title: "EC8553 Discrete-Time Signal Processing - Question Bank & Answer Key",
+        description: "Compiled 5-year question bank with 2-mark solved questions and 13-mark derivation keys on FFT, IIR/FIR filter structures, and multirate DSP.",
+        author: "Department of Electronics and Communication Engineering",
+        publisher: "BITSathy Central Library Repository",
+        category: "Previous-Year Question Papers",
+        subject: "Digital Signal Processing",
+        department: "Electronics and Communication Engineering",
+        resource_type: "PDF",
+        publication_year: 2024,
+        cover_image: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&q=80&w=400",
+        file_reference: {
+          filename: "bitsathy_dsp_question_bank_2024.pdf",
+          original_name: "bitsathy_dsp_question_bank_2024.pdf",
+          mime_type: "application/pdf",
+          file_size: 984,
+          storage_path: "uploads/digital-resources/bitsathy_dsp_question_bank_2024.pdf"
+        },
+        access_type: "INSTITUTIONAL",
+        publication_status: "PUBLISHED",
+        tags: ["Question Paper", "DSP", "Question Bank", "ECE", "Signal Processing"],
+        views_count: 420,
+        downloads_count: 310,
+        created_by: adminId
+      },
+      {
+        title: "Design and Analysis of Algorithms: Complete Unit I to V Handouts",
+        description: "Comprehensive faculty study material covering Asymptotic notations, Divide-and-Conquer, Dynamic Programming, Greedy choice, and NP-Completeness.",
+        author: "Dr. K. S. Ramanujam, Department of CSE",
+        publisher: "BITSathy Courseware Repository",
+        category: "Lecture Notes and Study Materials",
+        subject: "Algorithms",
+        department: "Computer Science and Engineering",
+        resource_type: "PDF",
+        publication_year: 2024,
+        cover_image: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&q=80&w=400",
+        file_reference: {
+          filename: "daa_complete_lecture_notes_bitsathy.pdf",
+          original_name: "daa_complete_lecture_notes_bitsathy.pdf",
+          mime_type: "application/pdf",
+          file_size: 1001,
+          storage_path: "uploads/digital-resources/daa_complete_lecture_notes_bitsathy.pdf"
+        },
+        access_type: "INSTITUTIONAL",
+        publication_status: "PUBLISHED",
+        tags: ["DAA", "Algorithms", "Lecture Notes", "Study Material", "Units 1-5"],
+        views_count: 850,
+        downloads_count: 615,
+        created_by: adminId
+      },
+      {
+        title: "Operating Systems: Concurrency, Virtual Memory & File Systems Notes",
+        description: "Illustrated study packet covering Semaphores, Mutex locks, Deadlock handling algorithms, Page replacement policies, and Disk scheduling.",
+        author: "Prof. N. Meenakshi Sundaram",
+        publisher: "BITSathy Academic Press",
+        category: "Lecture Notes and Study Materials",
+        subject: "Operating Systems",
+        department: "Information Technology",
+        resource_type: "PDF",
+        publication_year: 2024,
+        cover_image: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=400",
+        file_reference: {
+          filename: "os_concurrency_paging_notes.pdf",
+          original_name: "os_concurrency_paging_notes.pdf",
+          mime_type: "application/pdf",
+          file_size: 1004,
+          storage_path: "uploads/digital-resources/os_concurrency_paging_notes.pdf"
+        },
+        access_type: "INSTITUTIONAL",
+        publication_status: "PUBLISHED",
+        tags: ["Operating Systems", "Concurrency", "Paging", "Deadlocks", "IT"],
+        views_count: 672,
+        downloads_count: 489,
+        created_by: adminId
+      },
+      {
+        title: "Data Structures and Algorithms Laboratory Manual (Regulation 2021)",
+        description: "Official BITSathy laboratory syllabus with 14 verified programming exercises, test case suites, complexity analysis tables, and sample viva questions.",
+        author: "Department of Information Technology & CSE",
+        publisher: "BITSathy Autonomous Press",
+        category: "Laboratory Manuals",
+        subject: "Data Structures",
+        department: "Information Technology",
+        resource_type: "LAB_MANUAL",
+        publication_year: 2024,
+        cover_image: "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&q=80&w=400",
+        file_reference: {
+          filename: "dsa_lab_manual_reg2021.pdf",
+          original_name: "dsa_lab_manual_reg2021.pdf",
+          mime_type: "application/pdf",
+          file_size: 986,
+          storage_path: "uploads/digital-resources/dsa_lab_manual_reg2021.pdf"
+        },
+        access_type: "INSTITUTIONAL",
+        publication_status: "PUBLISHED",
+        tags: ["Lab Manual", "DSA", "Data Structures", "Reg2021", "Practical"],
+        views_count: 790,
+        downloads_count: 530,
+        created_by: adminId
+      },
+      {
+        title: "Embedded Systems & IoT Laboratory Observation Guide",
+        description: "Hands-on practical guide with circuit schematics for ARM Cortex-M microcontrollers, ESP32 Wi-Fi modules, sensor interfacing, and MQTT cloud telemetry.",
+        author: "School of Electrical Sciences (ECE & EEE)",
+        publisher: "BITSathy Innovations Lab",
+        category: "Laboratory Manuals",
+        subject: "Embedded Systems & IoT",
+        department: "Electronics and Communication Engineering",
+        resource_type: "LAB_MANUAL",
+        publication_year: 2024,
+        cover_image: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=400",
+        file_reference: {
+          filename: "embedded_iot_lab_guide.pdf",
+          original_name: "embedded_iot_lab_guide.pdf",
+          mime_type: "application/pdf",
+          file_size: 989,
+          storage_path: "uploads/digital-resources/embedded_iot_lab_guide.pdf"
+        },
+        access_type: "INSTITUTIONAL",
+        publication_status: "PUBLISHED",
+        tags: ["Lab Manual", "IoT", "Embedded", "ESP32", "ARM", "ECE"],
+        views_count: 360,
+        downloads_count: 215,
+        created_by: adminId
+      },
+      {
+        title: "Full-Stack Modern Web Engineering: React, Node.js, Express & MongoDB",
+        description: "Comprehensive guide covering component lifecycle, state management, REST API architectures, JWT authorization, MongoDB indexing, and cloud deployment on Vercel/Render.",
+        author: "Gowtham & Student Technical Guild",
+        publisher: "BITSathy Open Source Community",
+        category: "Programming and Technical Tutorials",
+        subject: "Web Development",
+        department: "Computer Science and Engineering",
+        resource_type: "TUTORIAL",
+        publication_year: 2024,
+        cover_image: "https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&q=80&w=400",
+        file_reference: {
+          filename: "fullstack_react_node_mongodb_guide.pdf",
+          original_name: "fullstack_react_node_mongodb_guide.pdf",
+          mime_type: "application/pdf",
+          file_size: 991,
+          storage_path: "uploads/digital-resources/fullstack_react_node_mongodb_guide.pdf"
+        },
+        external_url: "https://developer.mozilla.org/en-US/docs/Learn",
+        access_type: "OPEN_ACCESS",
+        publication_status: "PUBLISHED",
+        tags: ["React", "Node.js", "MongoDB", "Full-Stack", "JavaScript", "REST API"],
+        views_count: 890,
+        downloads_count: 670,
+        created_by: adminId
+      },
+      {
+        title: "PyTorch Deep Learning & Computer Vision Handbook",
+        description: "Jupyter-style practical tutorial covering Tensors, Autograd, CNN architectures, transfer learning with torchvision, and model deployment.",
+        author: "AI Research Group, BITSathy",
+        publisher: "BITSathy Centre of Excellence",
+        category: "Programming and Technical Tutorials",
+        subject: "Machine Learning",
+        department: "Artificial Intelligence & Data Science",
+        resource_type: "TUTORIAL",
+        publication_year: 2024,
+        cover_image: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&q=80&w=400",
+        external_url: "https://pytorch.org/tutorials/",
+        access_type: "OPEN_ACCESS",
+        publication_status: "PUBLISHED",
+        tags: ["PyTorch", "Python", "Deep Learning", "Computer Vision", "Tensors"],
+        views_count: 640,
+        downloads_count: 380,
+        created_by: adminId
+      },
+      {
+        title: "NPTEL: Cloud Computing by Prof. Soumya Kanti Ghosh (IIT Kharagpur)",
+        description: "12-week national online course covering Cloud virtualization architectures, Service models (IaaS, PaaS, SaaS), Resource management, SLA, and OpenStack deployment.",
+        author: "Prof. Soumya Kanti Ghosh, Department of CSE, IIT Kharagpur",
+        publisher: "NPTEL / SWAYAM - Ministry of Education, Govt of India",
+        category: "Online Courses and Educational Videos",
+        subject: "Cloud Computing & Distributed Systems",
+        department: "Computer Science and Engineering",
+        resource_type: "VIDEO",
+        publication_year: 2024,
+        cover_image: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&q=80&w=400",
+        external_url: "https://nptel.ac.in/courses/106105167",
+        access_type: "OPEN_ACCESS",
+        publication_status: "PUBLISHED",
+        tags: ["NPTEL", "Cloud Computing", "IIT Kharagpur", "SWAYAM", "Online Course"],
+        views_count: 720,
+        downloads_count: 0,
+        created_by: adminId
+      },
+      {
+        title: "MIT OpenCourseWare 6.006: Introduction to Algorithms",
+        description: "World-renowned video lectures on Algorithmic Thinking, Peak Finding, Sorting & Trees, Hashing, Numerics, Graphs, Shortest Paths, and Dynamic Programming.",
+        author: "Prof. Erik Demaine & Prof. Srini Devadas",
+        publisher: "Massachusetts Institute of Technology (MIT OCW)",
+        category: "Online Courses and Educational Videos",
+        subject: "Data Structures and Algorithms",
+        department: "Computer Science and Engineering",
+        resource_type: "VIDEO",
+        publication_year: 2021,
+        cover_image: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&q=80&w=400",
+        external_url: "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-fall-2011/",
+        access_type: "OPEN_ACCESS",
+        publication_status: "PUBLISHED",
+        tags: ["MIT", "Algorithms", "Video Lectures", "Erik Demaine", "Free Education"],
+        views_count: 940,
+        downloads_count: 0,
+        created_by: adminId
+      },
+      {
+        title: "GATE CS & IT: 15-Year Solved Papers & Chapter-wise Analysis",
+        description: "Carefully indexed previous 15 years GATE Computer Science question papers with detailed step-by-step explanations, shortcut formulas, and topic weightage breakdown.",
+        author: "BITSathy GATE Training Cell",
+        publisher: "Central Library Competitive Exam Section",
+        category: "Other Academic Resources",
+        subject: "GATE Preparation",
+        department: "All Departments",
+        resource_type: "PDF",
+        publication_year: 2024,
+        cover_image: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&q=80&w=400",
+        file_reference: {
+          filename: "gate_cs_it_15_year_solved_papers.pdf",
+          original_name: "gate_cs_it_15_year_solved_papers.pdf",
+          mime_type: "application/pdf",
+          file_size: 985,
+          storage_path: "uploads/digital-resources/gate_cs_it_15_year_solved_papers.pdf"
+        },
+        access_type: "INSTITUTIONAL",
+        publication_status: "PUBLISHED",
+        tags: ["GATE", "Competitive Exam", "Solved Papers", "Higher Studies", "CS/IT"],
+        views_count: 810,
+        downloads_count: 592,
+        created_by: adminId
+      },
+      {
+        title: "BITSathy Standard LaTeX Template for Final Year B.E. / B.Tech Project Reports",
+        description: "Official IEEE/BITSathy compliant LaTeX template and formatting guide with predefined title pages, certificate layouts, bibliography styles, and figure alignment guides.",
+        author: "Dean Academic Quality Assurance",
+        publisher: "BITSathy Academic Publications",
+        category: "Other Academic Resources",
+        subject: "Academic Writing & Thesis",
+        department: "All Departments",
+        resource_type: "PDF",
+        publication_year: 2024,
+        cover_image: "https://images.unsplash.com/photo-1457369804613-52c61a468e7d?auto=format&fit=crop&q=80&w=400",
+        file_reference: {
+          filename: "bitsathy_latex_project_template_guide.pdf",
+          original_name: "bitsathy_latex_project_template_guide.pdf",
+          mime_type: "application/pdf",
+          file_size: 999,
+          storage_path: "uploads/digital-resources/bitsathy_latex_project_template_guide.pdf"
+        },
+        access_type: "OPEN_ACCESS",
+        publication_status: "PUBLISHED",
+        tags: ["LaTeX", "Project Report", "Thesis", "S7/S8 Project", "Template", "BITSathy"],
+        views_count: 950,
+        downloads_count: 821,
+        created_by: adminId
+      }
+    ];
+    await DigitalResource.insertMany(initialResources);
+    console.log('MongoDB: Seeded 16 digital resources across all 8 academic categories.');
   }
 
   console.log('MongoDB: BIT Central Library initialized and seeded successfully.');
